@@ -363,6 +363,10 @@ async fn main() -> std::io::Result<()> {
         // CORS configuration - restrict to known origins for security
         let cors = Cors::default()
             .allowed_origin("https://edgeai-alpha.vercel.app")
+            .allowed_origin("https://frontend-flame-kappa-42.vercel.app")
+            .allowed_origin_fn(|origin, _req_head| {
+                origin.as_bytes().ends_with(b".vercel.app")
+            })
             .allowed_origin("https://edgeai-chain.github.io")
             .allowed_origin("http://localhost:3000")
             .allowed_origin("http://localhost:5173")
