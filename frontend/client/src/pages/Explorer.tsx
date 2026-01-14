@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../lib/config";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -58,7 +59,7 @@ interface ChainInfo {
   blockchain_id: string;
 }
 
-const API_URL = "https://edgeai-blockchain-node.fly.dev/api";
+const API_URL = API_BASE_URL;
 
 export default function Explorer() {
   const [chainInfo, setChainInfo] = useState<ChainInfo | null>(null);

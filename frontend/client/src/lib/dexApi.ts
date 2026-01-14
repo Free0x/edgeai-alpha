@@ -1,4 +1,6 @@
-const API_BASE = 'https://edgeai-blockchain-node.fly.dev';
+import { API_BASE_URL } from './config';
+
+const API_BASE = API_BASE_URL.replace('/api', '');
 
 export interface TradingPair {
   id: string;

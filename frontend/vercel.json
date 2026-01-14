@@ -4,6 +4,7 @@
   "buildCommand": "pnpm build",
   "outputDirectory": "dist/public",
   "rewrites": [
+    { "source": "/api/:path*", "destination": "https://edgeai-blockchain-node.fly.dev/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

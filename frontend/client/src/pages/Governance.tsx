@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../lib/config";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -520,7 +521,7 @@ export default function Governance() {
     const fetchData = async () => {
       try {
         // Fetch governance stats
-        const statsRes = await fetch("https://edgeai-blockchain-node.fly.dev/api/governance/stats");
+        const statsRes = await fetch("${API_BASE_URL}/governance/stats");
         const statsData = await statsRes.json();
         setStats({
           totalProposals: statsData.total_proposals || 0,
@@ -539,7 +540,7 @@ export default function Governance() {
         });
         
         // Fetch proposals
-        const proposalsRes = await fetch("https://edgeai-blockchain-node.fly.dev/api/governance/proposals");
+        const proposalsRes = await fetch("${API_BASE_URL}/governance/proposals");
         const proposalsData = await proposalsRes.json();
         setProposals(proposalsData.proposals || []);
       } catch (error) {
@@ -578,7 +579,7 @@ export default function Governance() {
       const signedRequest = await createSignedRequest(wallet, voteData);
       
       const response = await fetch(
-        `https://edgeai-blockchain-node.fly.dev/api/governance/proposals/${proposalId}/vote`,
+        `${API_BASE_URL}/governance/proposals/${proposalId}/vote`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -624,7 +625,7 @@ export default function Governance() {
       const signedRequest = await createSignedRequest(wallet, proposalData);
       
       const response = await fetch(
-        "https://edgeai-blockchain-node.fly.dev/api/governance/proposals",
+        "${API_BASE_URL}/governance/proposals",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

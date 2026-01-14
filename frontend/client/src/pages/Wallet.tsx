@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "@/lib/config";
 import { StepCard } from "@/components/StepCard";
 import { Terminal } from "@/components/Terminal";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +58,7 @@ export default function Wallet() {
     addLog("input", "edgeai-cli wallet generate");
     
     try {
-      const response = await fetch("https://edgeai-blockchain-node.fly.dev/api/wallet/generate", {
+      const response = await fetch("${API_BASE_URL}/wallet/generate", {
         method: "POST"
       });
       const result = await response.json();
@@ -91,7 +92,7 @@ export default function Wallet() {
     addLog("input", `edgeai-cli balance ${wallet.address}`);
     
     try {
-      const response = await fetch(`https://edgeai-blockchain-node.fly.dev/api/accounts/${wallet.address}/balance`);
+      const response = await fetch(`${API_BASE_URL}/accounts/${wallet.address}/balance`);
       const result = await response.json();
       
       // API returns { success: true, data: { address, balance } }
@@ -103,7 +104,7 @@ export default function Wallet() {
         addLog("info", "Balance is 0. Requesting faucet funds...");
         
         // Use the new faucet API
-        const faucetRes = await fetch("https://edgeai-blockchain-node.fly.dev/api/faucet", {
+        const faucetRes = await fetch("${API_BASE_URL}/faucet", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -121,7 +122,7 @@ export default function Wallet() {
           await new Promise(resolve => setTimeout(resolve, 1000));
           
           // Check balance again
-          const newBalanceRes = await fetch(`https://edgeai-blockchain-node.fly.dev/api/accounts/${wallet.address}/balance`);
+          const newBalanceRes = await fetch(`${API_BASE_URL}/accounts/${wallet.address}/balance`);
           const newBalanceResult = await newBalanceRes.json();
           const newBalance = newBalanceResult.data?.balance ?? newBalanceResult.balance ?? 0;
           setBalance(newBalance);
@@ -149,7 +150,7 @@ export default function Wallet() {
     try {
       // 1. Prepare - get the message to sign
       addLog("info", "Preparing transaction...");
-      const prepareRes = await fetch("https://edgeai-blockchain-node.fly.dev/api/wallet/prepare-transfer", {
+      const prepareRes = await fetch("${API_BASE_URL}/wallet/prepare-transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -164,7 +165,7 @@ export default function Wallet() {
       
       // 2. Sign the message with private key
       addLog("info", "Signing with private key...");
-      const signRes = await fetch("https://edgeai-blockchain-node.fly.dev/api/wallet/sign", {
+      const signRes = await fetch("${API_BASE_URL}/wallet/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -178,7 +179,7 @@ export default function Wallet() {
       
       // 3. Submit the signed transaction
       addLog("info", "Submitting signed transaction...");
-      const submitRes = await fetch("https://edgeai-blockchain-node.fly.dev/api/wallet/transfer", {
+      const submitRes = await fetch("${API_BASE_URL}/wallet/transfer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -216,7 +217,7 @@ export default function Wallet() {
     addLog("input", "edgeai-cli mine");
     
     try {
-      const response = await fetch("https://edgeai-blockchain-node.fly.dev/api/mine", {
+      const response = await fetch("${API_BASE_URL}/mine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ validator: wallet?.address || "miner" })

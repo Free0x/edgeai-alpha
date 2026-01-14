@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { API_BASE_URL } from '../lib/config';
 
 // BSC Testnet 配置
 const BSC_TESTNET = {
@@ -178,7 +179,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const fetchEdgeAIBalance = async (address: string) => {
     try {
       const response = await fetch(
-        `https://edgeai-blockchain-node.fly.dev/api/accounts/${address}`
+        `${API_BASE_URL}/accounts/${address}`
       );
       const data = await response.json();
       if (data.success && data.data) {
@@ -308,7 +309,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const response = await fetch(
-        "https://edgeai-blockchain-node.fly.dev/api/wallet/generate",
+        `${API_BASE_URL}/wallet/generate`,
         { method: "POST" }
       );
       const data = await response.json();
@@ -331,7 +332,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         // 从 Faucet 获取测试代币
         try {
-          await fetch("https://edgeai-blockchain-node.fly.dev/api/faucet", {
+          await fetch(`${API_BASE_URL}/faucet`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ address: wallet.address }),

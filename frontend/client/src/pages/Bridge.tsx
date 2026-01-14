@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../lib/config";
 import { useState, useEffect } from 'react';
 import { ArrowRightLeft, Wallet, ExternalLink, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 
@@ -176,7 +177,7 @@ export default function Bridge() {
   
   const fetchEdgeaiBalance = async (address: string) => {
     try {
-      const response = await fetch(`https://edgeai-blockchain-node.fly.dev/api/accounts/${address}`);
+      const response = await fetch(`${API_BASE_URL}/accounts/${address}`);
       const data = await response.json();
       if (data.success && data.data) {
         setEdgeaiBalance(data.data.balance?.toString() || '0');
@@ -215,7 +216,7 @@ export default function Bridge() {
       // Step 1: Lock EDGE on EdgeAI chain
       addLog('Step 1: Locking EDGE on EdgeAI chain...');
       
-      const lockResponse = await fetch('https://edgeai-blockchain-node.fly.dev/api/bridge/lock', {
+      const lockResponse = await fetch('${API_BASE_URL}/bridge/lock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

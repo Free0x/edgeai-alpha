@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "@/lib/config";
 import { StepCard } from "@/components/StepCard";
 import { Terminal } from "@/components/Terminal";
 import { Badge } from "@/components/ui/badge";
@@ -47,7 +48,7 @@ export default function Home() {
     addLog("input", "edgeai-cli wallet generate");
     
     try {
-      const response = await fetch("https://edgeai-blockchain-node.fly.dev/api/wallet/generate", {
+      const response = await fetch(`${API_BASE_URL}/wallet/generate`, {
         method: "POST"
       });
       const data = await response.json();
@@ -72,7 +73,7 @@ export default function Home() {
     addLog("input", `edgeai-cli balance ${wallet.address}`);
     
     try {
-      const response = await fetch(`https://edgeai-blockchain-node.fly.dev/api/accounts/${wallet.address}/balance`);
+      const response = await fetch(`${API_BASE_URL}/accounts/${wallet.address}/balance`);
       const data = await response.json();
       
       setBalance(data.balance);
@@ -81,7 +82,7 @@ export default function Home() {
       if (data.balance === 0) {
         addLog("info", "Balance is 0. Requesting faucet funds...");
         // Auto-fund for demo purposes
-        await fetch("https://edgeai-blockchain-node.fly.dev/api/transactions/transfer", {
+        await fetch(`${API_BASE_URL}/transactions/transfer`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -92,7 +93,7 @@ export default function Home() {
         });
         
         // Mine a block to confirm
-        await fetch("https://edgeai-blockchain-node.fly.dev/api/mine", {
+        await fetch(`${API_BASE_URL}/mine`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ validator: "faucet_miner" })
@@ -101,7 +102,7 @@ export default function Home() {
         addLog("success", "Faucet transfer initiated and mined.");
         
         // Check balance again
-        const newBalanceRes = await fetch(`https://edgeai-blockchain-node.fly.dev/api/accounts/${wallet.address}/balance`);
+        const newBalanceRes = await fetch(`${API_BASE_URL}/accounts/${wallet.address}/balance`);
         const newBalanceData = await newBalanceRes.json();
         setBalance(newBalanceData.balance);
         addLog("output", `New Balance: ${newBalanceData.balance} EDGE`);
@@ -124,7 +125,7 @@ export default function Home() {
     try {
       // 1. Prepare
       addLog("info", "Preparing transaction...");
-      const prepareRes = await fetch("https://edgeai-blockchain-node.fly.dev/api/wallet/transfer/prepare", {
+      const prepareRes = await fetch(`${API_BASE_URL}/wallet/transfer/prepare`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -143,7 +144,7 @@ export default function Home() {
       // which was added for the CLI tool.
       
       addLog("info", "Signing with private key...");
-      const signRes = await fetch("https://edgeai-blockchain-node.fly.dev/api/wallet/sign", {
+      const signRes = await fetch(`${API_BASE_URL}/wallet/sign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -156,7 +157,7 @@ export default function Home() {
       
       // 3. Submit
       addLog("info", "Submitting signed transaction...");
-      const submitRes = await fetch("https://edgeai-blockchain-node.fly.dev/api/wallet/transfer/submit", {
+      const submitRes = await fetch(`${API_BASE_URL}/wallet/transfer/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -188,7 +189,7 @@ export default function Home() {
     addLog("input", "edgeai-cli mine");
     
     try {
-      const response = await fetch("https://edgeai-blockchain-node.fly.dev/api/mine", {
+      const response = await fetch(`${API_BASE_URL}/mine`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ validator: wallet?.address || "miner" })

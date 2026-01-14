@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../lib/config";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,7 @@ import { cn } from "@/lib/utils";
 import { apiCall } from "@/lib/api";
 
 // API Base URL
-const API_BASE = "https://edgeai-blockchain-node.fly.dev/api";
+const API_BASE = API_BASE_URL;
 
 // Types
 interface StakingStats {

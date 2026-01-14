@@ -2,7 +2,7 @@ import { toast } from "sonner";
 import { generateIoTTransaction, getIoTTransactions as getLocalIoTTransactions, IoTTransaction } from "./iotGenerator";
 import { getValidators as getLocalValidators, Validator } from "./validators";
 
-const API_BASE_URL = "https://edgeai-blockchain-node.fly.dev/api";
+import { API_BASE_URL } from './config';
 
 export async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<{ success: boolean; data: T; error?: string }> {
   try {
