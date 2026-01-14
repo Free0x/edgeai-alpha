@@ -1,0 +1,10 @@
+{
+  "network": "bscTestnet",
+  "chainId": "97",
+  "deployer": "0x562F1ed46e86B5d5b5d91569372d4c4cE4341336",
+  "contracts": {
+    "WrappedEDGE": "0xEe3131549D8727bBCd6e628D90D6b57cf99F5794",
+    "EdgeAIBridge": "0x0f72c1d37F64f0E962278A1941EC7664D4e2289B"
+  },
+  "timestamp": "2026-01-14T09:06:57.329Z"
+}

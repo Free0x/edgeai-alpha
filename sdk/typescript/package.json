@@ -1,5 +1,5 @@
 {
-  "name": "@edgeai/sdk",
+  "name": "@free0x/edgeai-sdk",
   "version": "0.1.0",
   "description": "Official JavaScript/TypeScript SDK for EdgeAI Blockchain",
   "main": "dist/index.js",

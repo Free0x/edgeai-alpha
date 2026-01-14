@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { ArrowRightLeft, Wallet, ExternalLink, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 
-// Contract addresses (will be updated after deployment)
+// Contract addresses on BSC Testnet
 const CONTRACTS = {
-  sepolia: {
-    wEDGE: '',
-    bridge: '',
-    chainId: 11155111,
-    name: 'Sepolia',
-    explorer: 'https://sepolia.etherscan.io'
+  bscTestnet: {
+    wEDGE: '0xEe3131549D8727bBCd6e628D90D6b57cf99F5794',
+    bridge: '0x0f72c1d37F64f0E962278A1941EC7664D4e2289B',
+    chainId: 97,
+    name: 'BSC Testnet',
+    explorer: 'https://testnet.bscscan.com'
   }
 };
 
@@ -137,12 +137,12 @@ export default function Bridge() {
     }
   };
   
-  // Switch to Sepolia network
-  const switchToSepolia = async () => {
+  // Switch to BSC Testnet network
+  const switchToBscTestnet = async () => {
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0xaa36a7' }] // Sepolia chain ID
+        params: [{ chainId: '0x61' }] // BSC Testnet chain ID (97)
       });
     } catch (err: any) {
       // If network doesn't exist, add it
@@ -150,11 +150,11 @@ export default function Bridge() {
         await window.ethereum.request({
           method: 'wallet_addEthereumChain',
           params: [{
-            chainId: '0xaa36a7',
-            chainName: 'Sepolia Testnet',
-            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-            rpcUrls: ['https://rpc.sepolia.org'],
-            blockExplorerUrls: ['https://sepolia.etherscan.io']
+            chainId: '0x61',
+            chainName: 'BSC Testnet',
+            nativeCurrency: { name: 'BNB', symbol: 'tBNB', decimals: 18 },
+            rpcUrls: ['https://data-seed-prebsc-1-s1.binance.org:8545'],
+            blockExplorerUrls: ['https://testnet.bscscan.com']
           }]
         });
       }
@@ -305,7 +305,7 @@ export default function Bridge() {
     }
   };
   
-  const isCorrectNetwork = chainId === CONTRACTS.sepolia.chainId;
+  const isCorrectNetwork = chainId === CONTRACTS.bscTestnet.chainId;
   
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
@@ -353,7 +353,7 @@ export default function Bridge() {
               <div className="bg-gray-700 rounded-lg p-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-lg font-medium">
-                    {direction === 'toEVM' ? 'EdgeAI Chain' : 'EVM (Sepolia)'}
+                    {direction === 'toEVM' ? 'EdgeAI Chain' : 'BSC Testnet'}
                   </span>
                   <span className="text-sm text-gray-400">
                     Balance: {direction === 'toEVM' ? edgeaiBalance : wEdgeBalance} {direction === 'toEVM' ? 'EDGE' : 'wEDGE'}
@@ -382,7 +382,7 @@ export default function Bridge() {
               <div className="bg-gray-700 rounded-lg p-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-lg font-medium">
-                    {direction === 'toEVM' ? 'EVM (Sepolia)' : 'EdgeAI Chain'}
+                    {direction === 'toEVM' ? 'BSC Testnet' : 'EdgeAI Chain'}
                   </span>
                 </div>
                 {direction === 'toEVM' ? (
@@ -486,7 +486,7 @@ export default function Bridge() {
                   <div className="flex items-center justify-between">
                     <span className="text-gray-400">Network</span>
                     <span className={isCorrectNetwork ? 'text-green-400' : 'text-yellow-400'}>
-                      {chainId === 11155111 ? 'Sepolia' : chainId === 1 ? 'Mainnet' : `Chain ${chainId}`}
+                      {chainId === 97 ? 'BSC Testnet' : chainId === 56 ? 'BSC Mainnet' : `Chain ${chainId}`}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -496,10 +496,10 @@ export default function Bridge() {
                   
                   {!isCorrectNetwork && (
                     <button
-                      onClick={switchToSepolia}
+                      onClick={switchToBscTestnet}
                       className="w-full py-2 bg-yellow-600 hover:bg-yellow-500 rounded-lg text-sm font-medium"
                     >
-                      Switch to Sepolia Testnet
+                      Switch to BSC Testnet
                     </button>
                   )}
                 </div>
