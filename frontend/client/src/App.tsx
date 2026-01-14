@@ -1,6 +1,8 @@
 import { Switch, Route, Link, useLocation } from "wouter";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { WalletProvider } from "@/contexts/WalletContext";
+import WalletConnect from "@/components/WalletConnect";
 
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -48,10 +50,10 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
           
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-1">
             {navItems.map((item) => (
               <Link key={item.path} href={item.path} className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer",
+                  "flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer",
                   location === item.path || (item.path !== "/" && location.startsWith(item.path))
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground"
@@ -60,13 +62,17 @@ function Layout({ children }: { children: React.ReactNode }) {
                   {item.label}
               </Link>
             ))}
-            <div className="ml-2">
-              <ThemeToggle />
-            </div>
           </nav>
 
+          {/* Right side: Wallet Connect + Theme Toggle */}
+          <div className="hidden lg:flex items-center gap-3">
+            <WalletConnect />
+            <ThemeToggle />
+          </div>
+
           {/* Mobile Navigation */}
-          <div className="md:hidden flex items-center gap-2">
+          <div className="lg:hidden flex items-center gap-2">
+            <WalletConnect />
             <ThemeToggle />
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
               <SheetTrigger asChild>
@@ -114,26 +120,27 @@ function Layout({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-      <Layout>
-        <Switch>
-          <Route path="/" component={Dashboard} />
-          <Route path="/blocks" component={Blocks} />
-          <Route path="/block/:id" component={BlockDetails} />
-          <Route path="/transactions" component={Transactions} />
-          <Route path="/tx/:id" component={TransactionDetails} />
-          <Route path="/validators" component={Validators} />
-          <Route path="/staking" component={Staking} />
-          <Route path="/governance" component={Governance} />
-          <Route path="/dex" component={DEX} />
-          <Route path="/marketplace" component={Marketplace} />
-          <Route path="/wallet" component={Wallet} />
-          <Route path="/bridge" component={Bridge} />
-          <Route component={NotFound} />
-        </Switch>
-      </Layout>
+      <WalletProvider>
+        <Layout>
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/blocks" component={Blocks} />
+            <Route path="/block/:id" component={BlockDetails} />
+            <Route path="/transactions" component={Transactions} />
+            <Route path="/tx/:id" component={TransactionDetails} />
+            <Route path="/validators" component={Validators} />
+            <Route path="/staking" component={Staking} />
+            <Route path="/governance" component={Governance} />
+            <Route path="/dex" component={DEX} />
+            <Route path="/marketplace" component={Marketplace} />
+            <Route path="/wallet" component={Wallet} />
+            <Route path="/bridge" component={Bridge} />
+            <Route component={NotFound} />
+          </Switch>
+        </Layout>
+      </WalletProvider>
     </ThemeProvider>
   );
 }
 
 export default App;
-// Trigger Vercel deployment - Mon Jan 12 00:41:30 EST 2026
