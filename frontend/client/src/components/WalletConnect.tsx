@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 
 // MetaMask 图标 SVG
-const MetaMaskIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 35 33" fill="none" xmlns="http://www.w3.org/2000/svg">
+const MetaMaskIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 35 33" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M32.9582 1L19.8241 10.7183L22.2665 4.99099L32.9582 1Z" fill="#E17726" stroke="#E17726" strokeWidth="0.25" strokeLinecap="round" strokeLinejoin="round"/>
     <path d="M2.66296 1L15.6886 10.809L13.3541 4.99098L2.66296 1Z" fill="#E27625" stroke="#E27625" strokeWidth="0.25" strokeLinecap="round" strokeLinejoin="round"/>
     <path d="M28.2295 23.5334L24.7346 28.872L32.2271 30.9323L34.3804 23.6501L28.2295 23.5334Z" fill="#E27625" stroke="#E27625" strokeWidth="0.25" strokeLinecap="round" strokeLinejoin="round"/>
@@ -27,8 +27,8 @@ const MetaMaskIcon = () => (
 );
 
 // EdgeAI 图标
-const EdgeAIIcon = () => (
-  <div className="w-5 h-5 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
+const EdgeAIIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <div className={`${className} bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center`}>
     <span className="text-white text-xs font-bold">E</span>
   </div>
 );
@@ -57,9 +57,10 @@ export default function WalletConnect() {
     setTimeout(() => setCopiedAddress(null), 2000);
   };
 
-  // 格式化地址
-  const formatAddress = (address: string) => {
+  // 格式化地址 - 移动端更短
+  const formatAddress = (address: string, short: boolean = false) => {
     if (!address) return "";
+    if (short) return `${address.slice(0, 4)}...${address.slice(-3)}`;
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
@@ -77,10 +78,10 @@ export default function WalletConnect() {
 
   return (
     <div className="relative">
-      {/* 主按钮 */}
+      {/* 主按钮 - 响应式设计 */}
       <button
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+        className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 lg:px-4 py-1.5 sm:py-2 rounded-lg font-medium transition-all text-sm ${
           isAnyWalletConnected
             ? "bg-gray-800 hover:bg-gray-700 text-white border border-gray-600"
             : "bg-purple-600 hover:bg-purple-500 text-white"
@@ -93,53 +94,69 @@ export default function WalletConnect() {
         )}
         
         {isAnyWalletConnected ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
+            {/* 移动端只显示图标和短地址 */}
             {metamask.isConnected && (
               <div className="flex items-center gap-1">
-                <MetaMaskIcon />
-                <span className="text-sm">{formatAddress(metamask.address)}</span>
+                <MetaMaskIcon className="w-4 h-4 hidden sm:block" />
+                <span className="text-xs sm:text-sm">
+                  <span className="sm:hidden">{formatAddress(metamask.address, true)}</span>
+                  <span className="hidden sm:inline">{formatAddress(metamask.address)}</span>
+                </span>
               </div>
             )}
             {metamask.isConnected && edgeai.isConnected && (
-              <span className="text-gray-500">|</span>
+              <span className="text-gray-500 hidden sm:inline">|</span>
             )}
-            {edgeai.isConnected && (
+            {edgeai.isConnected && !metamask.isConnected && (
               <div className="flex items-center gap-1">
-                <EdgeAIIcon />
+                <EdgeAIIcon className="w-4 h-4 hidden sm:block" />
+                <span className="text-xs sm:text-sm">
+                  <span className="sm:hidden">{formatAddress(edgeai.address, true)}</span>
+                  <span className="hidden sm:inline">{formatAddress(edgeai.address)}</span>
+                </span>
+              </div>
+            )}
+            {edgeai.isConnected && metamask.isConnected && (
+              <div className="hidden sm:flex items-center gap-1">
+                <EdgeAIIcon className="w-4 h-4" />
                 <span className="text-sm">{formatAddress(edgeai.address)}</span>
               </div>
             )}
           </div>
         ) : (
-          <span>Connect Wallet</span>
+          <>
+            <span className="hidden sm:inline">Connect Wallet</span>
+            <span className="sm:hidden">Connect</span>
+          </>
         )}
         
-        <ChevronDown className={`w-4 h-4 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
+        <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
       </button>
 
-      {/* 下拉菜单 */}
+      {/* 下拉菜单 - 响应式宽度 */}
       {isDropdownOpen && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-gray-800 border border-gray-700 rounded-xl shadow-xl z-50">
+        <div className="absolute right-0 top-full mt-2 w-[calc(100vw-24px)] sm:w-80 max-w-[320px] bg-gray-800 border border-gray-700 rounded-xl shadow-xl z-50">
           {/* 错误提示 */}
           {error && (
-            <div className="p-3 bg-red-900/50 border-b border-gray-700 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400" />
-              <span className="text-sm text-red-400 flex-1">{error}</span>
-              <button onClick={clearError} className="text-gray-400 hover:text-white">
+            <div className="p-2 sm:p-3 bg-red-900/50 border-b border-gray-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <span className="text-xs sm:text-sm text-red-400 flex-1 line-clamp-2">{error}</span>
+              <button onClick={clearError} className="text-gray-400 hover:text-white shrink-0">
                 ×
               </button>
             </div>
           )}
 
           {/* MetaMask 部分 */}
-          <div className="p-4 border-b border-gray-700">
-            <div className="flex items-center justify-between mb-3">
+          <div className="p-3 sm:p-4 border-b border-gray-700">
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
               <div className="flex items-center gap-2">
-                <MetaMaskIcon />
-                <span className="font-medium text-white">MetaMask</span>
+                <MetaMaskIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="font-medium text-white text-sm sm:text-base">MetaMask</span>
               </div>
               {metamask.isConnected && (
-                <span className={`text-xs px-2 py-1 rounded ${
+                <span className={`text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded ${
                   metamask.isCorrectNetwork 
                     ? "bg-green-900/50 text-green-400" 
                     : "bg-yellow-900/50 text-yellow-400"
@@ -150,10 +167,10 @@ export default function WalletConnect() {
             </div>
 
             {metamask.isConnected ? (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {/* 地址 */}
                 <div className="flex items-center justify-between bg-gray-900 rounded-lg p-2">
-                  <span className="text-sm text-gray-300">{formatAddress(metamask.address)}</span>
+                  <span className="text-xs sm:text-sm text-gray-300">{formatAddress(metamask.address)}</span>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => copyAddress(metamask.address)}
@@ -161,9 +178,9 @@ export default function WalletConnect() {
                       title="Copy address"
                     >
                       {copiedAddress === metamask.address ? (
-                        <Check className="w-4 h-4 text-green-400" />
+                        <Check className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" />
                       ) : (
-                        <Copy className="w-4 h-4 text-gray-400" />
+                        <Copy className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
                       )}
                     </button>
                     <a
@@ -173,7 +190,7 @@ export default function WalletConnect() {
                       className="p-1 hover:bg-gray-700 rounded"
                       title="View on BSCScan"
                     >
-                      <ExternalLink className="w-4 h-4 text-gray-400" />
+                      <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
                     </a>
                   </div>
                 </div>
@@ -182,11 +199,11 @@ export default function WalletConnect() {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="bg-gray-900 rounded-lg p-2">
                     <div className="text-gray-500 text-xs">tBNB</div>
-                    <div className="text-white font-medium">{formatBalance(metamask.balance)}</div>
+                    <div className="text-white font-medium text-sm">{formatBalance(metamask.balance)}</div>
                   </div>
                   <div className="bg-gray-900 rounded-lg p-2">
                     <div className="text-gray-500 text-xs">wEDGE</div>
-                    <div className="text-purple-400 font-medium">{formatBalance(metamask.wEdgeBalance)}</div>
+                    <div className="text-purple-400 font-medium text-sm">{formatBalance(metamask.wEdgeBalance)}</div>
                   </div>
                 </div>
 
@@ -194,7 +211,7 @@ export default function WalletConnect() {
                 {!metamask.isCorrectNetwork && (
                   <button
                     onClick={switchToBscTestnet}
-                    className="w-full py-2 bg-yellow-600 hover:bg-yellow-500 rounded-lg text-sm font-medium text-white"
+                    className="w-full py-2 bg-yellow-600 hover:bg-yellow-500 rounded-lg text-xs sm:text-sm font-medium text-white"
                   >
                     Switch to BSC Testnet
                   </button>
@@ -203,9 +220,9 @@ export default function WalletConnect() {
                 {/* 断开连接 */}
                 <button
                   onClick={disconnectMetaMask}
-                  className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium text-gray-300 flex items-center justify-center gap-2"
+                  className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs sm:text-sm font-medium text-gray-300 flex items-center justify-center gap-2"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3 h-3 sm:w-4 sm:h-4" />
                   Disconnect
                 </button>
               </div>
@@ -213,13 +230,13 @@ export default function WalletConnect() {
               <button
                 onClick={connectMetaMask}
                 disabled={isLoading}
-                className="w-full py-3 bg-orange-600 hover:bg-orange-500 rounded-lg font-medium text-white flex items-center justify-center gap-2"
+                className="w-full py-2.5 sm:py-3 bg-orange-600 hover:bg-orange-500 rounded-lg font-medium text-white flex items-center justify-center gap-2 text-sm"
               >
                 {isLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
-                    <MetaMaskIcon />
+                    <MetaMaskIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                     {metamask.isInstalled ? "Connect MetaMask" : "Install MetaMask"}
                   </>
                 )}
@@ -228,33 +245,33 @@ export default function WalletConnect() {
           </div>
 
           {/* EdgeAI 部分 */}
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-3">
+          <div className="p-3 sm:p-4">
+            <div className="flex items-center justify-between mb-2 sm:mb-3">
               <div className="flex items-center gap-2">
-                <EdgeAIIcon />
-                <span className="font-medium text-white">EdgeAI Wallet</span>
+                <EdgeAIIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="font-medium text-white text-sm sm:text-base">EdgeAI Wallet</span>
               </div>
               {edgeai.isConnected && (
-                <span className="text-xs px-2 py-1 rounded bg-purple-900/50 text-purple-400">
+                <span className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-purple-900/50 text-purple-400">
                   Native Chain
                 </span>
               )}
             </div>
 
             {edgeai.isConnected ? (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {/* 地址 */}
                 <div className="flex items-center justify-between bg-gray-900 rounded-lg p-2">
-                  <span className="text-sm text-gray-300">{formatAddress(edgeai.address)}</span>
+                  <span className="text-xs sm:text-sm text-gray-300">{formatAddress(edgeai.address)}</span>
                   <button
                     onClick={() => copyAddress(edgeai.address)}
                     className="p-1 hover:bg-gray-700 rounded"
                     title="Copy address"
                   >
                     {copiedAddress === edgeai.address ? (
-                      <Check className="w-4 h-4 text-green-400" />
+                      <Check className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" />
                     ) : (
-                      <Copy className="w-4 h-4 text-gray-400" />
+                      <Copy className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400" />
                     )}
                   </button>
                 </div>
@@ -262,7 +279,7 @@ export default function WalletConnect() {
                 {/* 余额 */}
                 <div className="bg-gray-900 rounded-lg p-2">
                   <div className="text-gray-500 text-xs">EDGE Balance</div>
-                  <div className="text-purple-400 font-medium text-lg">
+                  <div className="text-purple-400 font-medium text-base sm:text-lg">
                     {formatBalance(edgeai.balance, 2)} EDGE
                   </div>
                 </div>
@@ -271,7 +288,7 @@ export default function WalletConnect() {
               <button
                 onClick={createEdgeAIWallet}
                 disabled={isLoading}
-                className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-medium text-white flex items-center justify-center gap-2"
+                className="w-full py-2.5 sm:py-3 bg-purple-600 hover:bg-purple-500 rounded-lg font-medium text-white flex items-center justify-center gap-2 text-sm"
               >
                 {isLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -287,13 +304,13 @@ export default function WalletConnect() {
 
           {/* 刷新按钮 */}
           {isAnyWalletConnected && (
-            <div className="p-3 border-t border-gray-700">
+            <div className="p-2 sm:p-3 border-t border-gray-700">
               <button
                 onClick={refreshBalances}
                 disabled={isLoading}
-                className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium text-gray-300 flex items-center justify-center gap-2"
+                className="w-full py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs sm:text-sm font-medium text-gray-300 flex items-center justify-center gap-2"
               >
-                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+                <RefreshCw className={`w-3 h-3 sm:w-4 sm:h-4 ${isLoading ? "animate-spin" : ""}`} />
                 Refresh Balances
               </button>
             </div>

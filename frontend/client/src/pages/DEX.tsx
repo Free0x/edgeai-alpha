@@ -205,18 +205,18 @@ export default function DEX() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950">
-      <div className="container mx-auto px-4 py-6 space-y-6">
+      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
-                <span className="text-cyan-400 font-bold">E</span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                <span className="text-cyan-400 font-bold text-sm sm:text-base">E</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                  EDGEAI / WBNB
-                  <Badge variant="outline" className="text-xs border-cyan-500/50 text-cyan-400">
+                <h1 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-1 sm:gap-2 flex-wrap">
+                  <span>EDGEAI / WBNB</span>
+                  <Badge variant="outline" className="text-[10px] sm:text-xs border-cyan-500/50 text-cyan-400">
                     PancakeSwap V3
                   </Badge>
                 </h1>
@@ -238,7 +238,7 @@ export default function DEX() {
           
           {/* Price */}
           <div className="text-right">
-            <div className="text-3xl font-bold text-white">
+            <div className="text-xl sm:text-3xl font-bold text-white">
               ${marketData.priceUSD.toFixed(4)}
             </div>
             <div className={cn(
@@ -279,52 +279,52 @@ export default function DEX() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-4">
           <Card className="bg-gray-900/50 border-gray-800">
-            <CardContent className="p-4">
-              <div className="text-xs text-gray-400 mb-1">Market Cap</div>
-              <div className="text-lg font-bold text-white">{formatUSD(marketData.marketCap)}</div>
+            <CardContent className="p-2 sm:p-4">
+              <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1">Market Cap</div>
+              <div className="text-sm sm:text-lg font-bold text-white">{formatUSD(marketData.marketCap)}</div>
             </CardContent>
           </Card>
           
           <Card className="bg-gray-900/50 border-gray-800">
-            <CardContent className="p-4">
-              <div className="text-xs text-gray-400 mb-1 flex items-center gap-1">
-                <Droplets className="w-3 h-3" /> Liquidity
+            <CardContent className="p-2 sm:p-4">
+              <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1">
+                <Droplets className="w-3 h-3 hidden sm:block" /> Liquidity
               </div>
-              <div className="text-lg font-bold text-white">{formatUSD(marketData.liquidity)}</div>
+              <div className="text-sm sm:text-lg font-bold text-white">{formatUSD(marketData.liquidity)}</div>
             </CardContent>
           </Card>
           
           <Card className="bg-gray-900/50 border-gray-800">
-            <CardContent className="p-4">
-              <div className="text-xs text-gray-400 mb-1 flex items-center gap-1">
-                <Activity className="w-3 h-3" /> 24h Volume
+            <CardContent className="p-2 sm:p-4">
+              <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1">
+                <Activity className="w-3 h-3 hidden sm:block" /> 24h Vol
               </div>
-              <div className="text-lg font-bold text-white">{formatUSD(marketData.volume24h)}</div>
+              <div className="text-sm sm:text-lg font-bold text-white">{formatUSD(marketData.volume24h)}</div>
             </CardContent>
           </Card>
           
           <Card className="bg-gray-900/50 border-gray-800">
-            <CardContent className="p-4">
-              <div className="text-xs text-gray-400 mb-1">FDV</div>
-              <div className="text-lg font-bold text-white">{formatUSD(marketData.fdv)}</div>
+            <CardContent className="p-2 sm:p-4">
+              <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1">FDV</div>
+              <div className="text-sm sm:text-lg font-bold text-white">{formatUSD(marketData.fdv)}</div>
             </CardContent>
           </Card>
           
           <Card className="bg-gray-900/50 border-gray-800">
-            <CardContent className="p-4">
-              <div className="text-xs text-gray-400 mb-1 flex items-center gap-1">
-                <Users className="w-3 h-3" /> Holders
+            <CardContent className="p-2 sm:p-4">
+              <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1 flex items-center gap-1">
+                <Users className="w-3 h-3 hidden sm:block" /> Holders
               </div>
-              <div className="text-lg font-bold text-white">{formatNumber(marketData.holders)}</div>
+              <div className="text-sm sm:text-lg font-bold text-white">{formatNumber(marketData.holders)}</div>
             </CardContent>
           </Card>
           
           <Card className="bg-gray-900/50 border-gray-800">
-            <CardContent className="p-4">
-              <div className="text-xs text-gray-400 mb-1">24h Txns</div>
-              <div className="text-lg font-bold text-white">
+            <CardContent className="p-2 sm:p-4">
+              <div className="text-[10px] sm:text-xs text-gray-400 mb-0.5 sm:mb-1">24h Txns</div>
+              <div className="text-sm sm:text-lg font-bold text-white">
                 <span className="text-green-400">{marketData.txns24h.buys}</span>
                 {' / '}
                 <span className="text-red-400">{marketData.txns24h.sells}</span>
@@ -356,7 +356,7 @@ export default function DEX() {
               </CardHeader>
               <CardContent>
                 {/* Embedded DEX Screener Chart */}
-                <div className="w-full h-[400px] rounded-lg overflow-hidden bg-gray-950">
+                <div className="w-full h-[300px] sm:h-[400px] rounded-lg overflow-hidden bg-gray-950">
                   <iframe
                     src="https://dexscreener.com/bsc/0x47F93f12853c8bA0D8a81Fdac3867D993e2ebD06?embed=1&theme=dark&trades=0&info=0"
                     className="w-full h-full border-0"
@@ -456,33 +456,33 @@ export default function DEX() {
 
         {/* Trade History */}
         <Card className="bg-gray-900/50 border-gray-800">
-          <CardHeader>
-            <CardTitle className="text-white">Recent Trades</CardTitle>
+          <CardHeader className="p-3 sm:p-6">
+            <CardTitle className="text-white text-base sm:text-lg">Recent Trades</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
+          <CardContent className="p-2 sm:p-6 pt-0">
+            <div className="overflow-x-auto -mx-2 sm:mx-0">
+              <table className="w-full min-w-[500px] sm:min-w-0">
                 <thead>
-                  <tr className="text-left text-gray-400 text-sm border-b border-gray-800">
-                    <th className="pb-3 pr-4">Time</th>
-                    <th className="pb-3 pr-4">Type</th>
-                    <th className="pb-3 pr-4">Price</th>
-                    <th className="pb-3 pr-4">Amount</th>
-                    <th className="pb-3 pr-4">Value</th>
-                    <th className="pb-3">Maker</th>
+                  <tr className="text-left text-gray-400 text-xs sm:text-sm border-b border-gray-800">
+                    <th className="pb-2 sm:pb-3 pr-2 sm:pr-4">Time</th>
+                    <th className="pb-2 sm:pb-3 pr-2 sm:pr-4">Type</th>
+                    <th className="pb-2 sm:pb-3 pr-2 sm:pr-4">Price</th>
+                    <th className="pb-2 sm:pb-3 pr-2 sm:pr-4">Amount</th>
+                    <th className="pb-2 sm:pb-3 pr-2 sm:pr-4 hidden sm:table-cell">Value</th>
+                    <th className="pb-2 sm:pb-3 hidden md:table-cell">Maker</th>
                   </tr>
                 </thead>
                 <tbody>
                   {trades.slice(0, 15).map((trade, i) => (
                     <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                      <td className="py-3 pr-4 text-gray-400 text-sm">
+                      <td className="py-2 sm:py-3 pr-2 sm:pr-4 text-gray-400 text-xs sm:text-sm">
                         {new Date(trade.timestamp * 1000).toLocaleTimeString()}
                       </td>
-                      <td className="py-3 pr-4">
+                      <td className="py-2 sm:py-3 pr-2 sm:pr-4">
                         <Badge 
                           variant="outline" 
                           className={cn(
-                            "text-xs",
+                            "text-[10px] sm:text-xs",
                             trade.type === 'buy' 
                               ? "border-green-500/50 text-green-400" 
                               : "border-red-500/50 text-red-400"
@@ -491,16 +491,16 @@ export default function DEX() {
                           {trade.type.toUpperCase()}
                         </Badge>
                       </td>
-                      <td className="py-3 pr-4 text-white font-mono">
+                      <td className="py-2 sm:py-3 pr-2 sm:pr-4 text-white font-mono text-xs sm:text-sm">
                         ${trade.price.toFixed(4)}
                       </td>
-                      <td className="py-3 pr-4 text-white">
-                        {trade.amountToken.toFixed(2)} EDGEAI
+                      <td className="py-2 sm:py-3 pr-2 sm:pr-4 text-white text-xs sm:text-sm">
+                        {trade.amountToken.toFixed(2)}
                       </td>
-                      <td className="py-3 pr-4 text-white">
+                      <td className="py-2 sm:py-3 pr-2 sm:pr-4 text-white text-xs sm:text-sm hidden sm:table-cell">
                         ${trade.amountUSD.toFixed(2)}
                       </td>
-                      <td className="py-3 text-gray-400 font-mono text-sm">
+                      <td className="py-2 sm:py-3 text-gray-400 font-mono text-xs sm:text-sm hidden md:table-cell">
                         <a 
                           href={`https://bscscan.com/address/${trade.maker}`}
                           target="_blank"
@@ -519,14 +519,14 @@ export default function DEX() {
         </Card>
 
         {/* Quick Links */}
-        <div className="flex flex-wrap gap-3 justify-center">
+        <div className="flex flex-wrap gap-2 sm:gap-3 justify-center">
           <a
             href="https://dexscreener.com/bsc/0x47F93f12853c8bA0D8a81Fdac3867D993e2ebD06"
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Button variant="outline" className="border-gray-700 text-gray-300 hover:text-white">
-              DEX Screener <ExternalLink className="w-4 h-4 ml-2" />
+            <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:text-white text-xs sm:text-sm">
+              DEX Screener <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 ml-1 sm:ml-2" />
             </Button>
           </a>
           <a
@@ -534,8 +534,8 @@ export default function DEX() {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Button variant="outline" className="border-gray-700 text-gray-300 hover:text-white">
-              PancakeSwap <ExternalLink className="w-4 h-4 ml-2" />
+            <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:text-white text-xs sm:text-sm">
+              PancakeSwap <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 ml-1 sm:ml-2" />
             </Button>
           </a>
           <a
@@ -543,8 +543,8 @@ export default function DEX() {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Button variant="outline" className="border-gray-700 text-gray-300 hover:text-white">
-              BSCScan <ExternalLink className="w-4 h-4 ml-2" />
+            <Button variant="outline" size="sm" className="border-gray-700 text-gray-300 hover:text-white text-xs sm:text-sm">
+              BSCScan <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4 ml-1 sm:ml-2" />
             </Button>
           </a>
         </div>
