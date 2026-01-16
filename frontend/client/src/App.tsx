@@ -24,6 +24,8 @@ const Marketplace = lazy(() => import("@/pages/Marketplace"));
 const DEX = lazy(() => import("@/pages/DEX"));
 const Wallet = lazy(() => import("@/pages/Wallet"));
 const Bridge = lazy(() => import("@/pages/Bridge"));
+const IoT = lazy(() => import("@/pages/IoT"));
+const Rewards = lazy(() => import("@/pages/Rewards"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 // Loading fallback component
@@ -53,6 +55,8 @@ function Layout({ children }: { children: React.ReactNode }) {
     { path: "/marketplace", label: "Market Place", icon: "fas fa-store" },
     { path: "/wallet", label: "Wallet", icon: "fas fa-wallet" },
     { path: "/bridge", label: "Bridge", icon: "fas fa-exchange-alt" },
+    { path: "/iot", label: "IoT Hub", icon: "fas fa-microchip" },
+    { path: "/rewards", label: "Rewards", icon: "fas fa-gift" },
   ];
 
   return (
@@ -151,6 +155,8 @@ function App() {
             <Route path="/marketplace" component={Marketplace} />
             <Route path="/wallet" component={Wallet} />
             <Route path="/bridge" component={Bridge} />
+            <Route path="/iot" component={IoT} />
+            <Route path="/rewards" component={Rewards} />
             <Route component={NotFound} />
           </Switch>
         </Layout>
