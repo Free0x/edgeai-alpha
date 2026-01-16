@@ -42,7 +42,7 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 rocksdb = "0.22"
 
 # Math for entropy calculation
-statrs = "0.17"
+statrs = "0.18"
 
 # Parallel processing
 rayon = "1.10"
