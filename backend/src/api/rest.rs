@@ -559,5 +559,31 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         
         // Network routes
         .route("/api/network", web::get().to(get_network_stats))
-        .route("/api/network/peers", web::get().to(get_peers));
+        .route("/api/network/peers", web::get().to(get_peers))
+        
+        // Health & Status routes
+        .route("/api/status", web::get().to(get_status))
+        .route("/api/health", web::get().to(health_check));
+}
+
+/// Health check endpoint (for load balancers)
+pub async fn health_check() -> impl Responder {
+    HttpResponse::Ok().json(serde_json::json!({
+        "status": "healthy",
+        "timestamp": chrono::Utc::now().timestamp()
+    }))
+}
+
+/// Status endpoint with basic info
+pub async fn get_status(data: web::Data<AppState>) -> impl Responder {
+    let blockchain = data.blockchain.read().await;
+    let height = blockchain.chain.len() as u64 + blockchain.total_blocks.saturating_sub(blockchain.chain.len() as u64);
+    
+    HttpResponse::Ok().json(serde_json::json!({
+        "status": "running",
+        "version": "0.6.0",
+        "chain_height": height,
+        "pending_tx": blockchain.pending_transactions.len(),
+        "timestamp": chrono::Utc::now().timestamp()
+    }))
 }
