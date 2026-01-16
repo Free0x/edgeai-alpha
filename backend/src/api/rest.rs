@@ -564,6 +564,12 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         // Health & Status routes
         .route("/api/status", web::get().to(get_status))
         .route("/api/health", web::get().to(health_check));
+    
+    // Configure IoT routes
+    super::iot::configure_iot_routes(cfg);
+    
+    // Configure Rewards routes
+    super::rewards::configure_rewards_routes(cfg);
 }
 
 /// Health check endpoint (for load balancers)
