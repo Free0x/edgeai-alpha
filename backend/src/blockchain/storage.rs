@@ -52,11 +52,21 @@ impl Storage {
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
         opts.set_max_open_files(256);
-        opts.set_write_buffer_size(64 * 1024 * 1024); // 64MB write buffer
-        opts.set_max_write_buffer_number(3);
-        opts.set_target_file_size_base(64 * 1024 * 1024); // 64MB SST files
-        opts.set_level_zero_file_num_compaction_trigger(4);
-        opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+        opts.set_write_buffer_size(32 * 1024 * 1024); // 32MB write buffer (reduced)
+        opts.set_max_write_buffer_number(2);
+        opts.set_target_file_size_base(32 * 1024 * 1024); // 32MB SST files (reduced)
+        opts.set_level_zero_file_num_compaction_trigger(2); // More aggressive compaction
+        opts.set_compression_type(rocksdb::DBCompressionType::Zstd); // Better compression
+        opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
+        opts.set_compression_per_level(&[
+            rocksdb::DBCompressionType::None,  // L0: no compression for speed
+            rocksdb::DBCompressionType::Lz4,   // L1: fast compression
+            rocksdb::DBCompressionType::Zstd,  // L2+: best compression
+            rocksdb::DBCompressionType::Zstd,
+            rocksdb::DBCompressionType::Zstd,
+            rocksdb::DBCompressionType::Zstd,
+        ]);
+        opts.set_level_compaction_dynamic_level_bytes(true);
         
         // Define column families
         let cf_names = vec![
@@ -392,6 +402,101 @@ impl Storage {
             }
             _ => None
         }
+    }
+    
+    /// Prune old blocks to save disk space
+    /// Keeps only the last `keep_blocks` full blocks, older blocks are pruned to headers only
+    pub fn prune_old_blocks(&self, current_height: u64, keep_blocks: u64) -> Result<usize, String> {
+        if current_height <= keep_blocks {
+            return Ok(0);
+        }
+        
+        let cf_blocks = self.db.cf_handle(CF_BLOCKS)
+            .ok_or("CF_BLOCKS not found")?;
+        let cf_txs = self.db.cf_handle(CF_TRANSACTIONS)
+            .ok_or("CF_TRANSACTIONS not found")?;
+        
+        let prune_before = current_height - keep_blocks;
+        let mut pruned_count = 0;
+        let mut batch = WriteBatch::default();
+        
+        // Prune blocks older than prune_before
+        for index in 0..prune_before {
+            let index_key = index.to_be_bytes();
+            
+            // Get the block to extract transaction hashes for cleanup
+            if let Ok(Some(block_data)) = self.db.get_cf(&cf_blocks, &index_key) {
+                if let Ok(block) = serde_json::from_slice::<Block>(&block_data) {
+                    // Create a pruned version (header only, no transactions)
+                    let pruned_block = Block {
+                        index: block.index,
+                        header: block.header,
+                        transactions: Vec::new(), // Remove transactions
+                        hash: block.hash,
+                        validator: block.validator,
+                    };
+                    
+                    // Store pruned block
+                    if let Ok(pruned_data) = serde_json::to_vec(&pruned_block) {
+                        batch.put_cf(&cf_blocks, &index_key, &pruned_data);
+                        pruned_count += 1;
+                    }
+                    
+                    // Note: We keep transaction index for lookups, but the actual tx data
+                    // is removed from the block. API will return "pruned" for old txs.
+                }
+            }
+        }
+        
+        if pruned_count > 0 {
+            self.db.write(batch)
+                .map_err(|e| format!("Failed to write pruned blocks: {}", e))?;
+            info!("Pruned {} old blocks (kept headers only)", pruned_count);
+        }
+        
+        Ok(pruned_count)
+    }
+    
+    /// Trigger manual compaction to reclaim disk space
+    pub fn compact(&self) -> Result<(), String> {
+        info!("Starting RocksDB compaction...");
+        
+        // Compact all column families
+        let cf_names = vec![
+            CF_BLOCKS, CF_BLOCK_HASHES, CF_TRANSACTIONS, 
+            CF_ACCOUNTS, CF_DATA_REGISTRY, CF_METADATA
+        ];
+        
+        for cf_name in cf_names {
+            if let Some(cf) = self.db.cf_handle(cf_name) {
+                self.db.compact_range_cf(&cf, None::<&[u8]>, None::<&[u8]>);
+            }
+        }
+        
+        info!("RocksDB compaction completed");
+        Ok(())
+    }
+    
+    /// Get database size estimate
+    pub fn get_db_size(&self) -> u64 {
+        let db_path = Path::new(&self.data_dir).join("rocksdb");
+        Self::dir_size(&db_path).unwrap_or(0)
+    }
+    
+    fn dir_size(path: &Path) -> std::io::Result<u64> {
+        let mut size = 0;
+        if path.is_dir() {
+            for entry in std::fs::read_dir(path)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_dir() {
+                    size += Self::dir_size(&path)?;
+                } else {
+                    size += entry.metadata()?.len();
+                }
+            }
+        }
+        Ok(size)
     }
 }
 

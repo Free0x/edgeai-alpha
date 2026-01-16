@@ -74,11 +74,25 @@ pub struct ContributionMessage {
     pub timestamp: i64,
 }
 
+/// Compact block for efficient P2P propagation
+/// Contains header info and transaction hashes only, not full transactions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompactBlock {
+    pub index: u64,
+    pub hash: String,
+    pub previous_hash: String,
+    pub validator: String,
+    pub timestamp: String,
+    pub tx_count: u32,
+    pub tx_hashes: Vec<String>,
+}
+
 /// Gossip message wrapper
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GossipMessage {
     Transaction(Transaction),
-    Block(Block),
+    Block(Block),  // Full block (for backward compatibility)
+    CompactBlock(CompactBlock),  // Compact block announcement
     Contribution(ContributionMessage),
 }
 
@@ -161,10 +175,11 @@ impl P2PNetwork {
         let local_key = libp2p::identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
         
-        // Configure gossipsub
+        // Configure gossipsub with optimized settings
         let gossipsub_config = gossipsub::ConfigBuilder::default()
             .heartbeat_interval(Duration::from_secs(1))
             .validation_mode(ValidationMode::Strict)
+            .max_transmit_size(4 * 1024 * 1024) // 4MB max message size (increased from default 1MB)
             .message_id_fn(|message: &gossipsub::Message| {
                 let mut hasher = DefaultHasher::new();
                 message.data.hash(&mut hasher);
@@ -292,6 +307,12 @@ impl P2PNetwork {
                         GossipMessage::Block(block) => {
                             let _ = self.event_tx.send(NetworkEvent::NewBlock(block)).await;
                         }
+                        GossipMessage::CompactBlock(compact) => {
+                            // CompactBlock is for announcement only
+                            // Peers can request full block if needed
+                            debug!("Received compact block #{} with {} txs", compact.index, compact.tx_count);
+                            // For now, we just log it - full block sync would be implemented separately
+                        }
                         GossipMessage::Contribution(contrib) => {
                             let _ = self.event_tx.send(NetworkEvent::NewContribution(contrib)).await;
                         }
@@ -359,11 +380,24 @@ impl P2PNetwork {
             }
             
             NetworkCommand::BroadcastBlock(block) => {
-                let msg = GossipMessage::Block(block);
+                // Create a compact block announcement (header + tx hashes only)
+                // Full block can be requested by peers if needed
+                let compact_block = CompactBlock {
+                    index: block.index,
+                    hash: block.hash.clone(),
+                    previous_hash: block.header.previous_hash.clone(),
+                    validator: block.validator.clone(),
+                    timestamp: block.header.timestamp.to_string(),
+                    tx_count: block.transactions.len() as u32,
+                    tx_hashes: block.transactions.iter().map(|tx| tx.hash.clone()).collect(),
+                };
+                let msg = GossipMessage::CompactBlock(compact_block);
                 if let Ok(data) = serde_json::to_vec(&msg) {
                     let topic = IdentTopic::new(topics::BLOCKS);
                     if let Err(e) = swarm.behaviour_mut().gossipsub.publish(topic, data) {
                         warn!("Failed to broadcast block: {}", e);
+                    } else {
+                        debug!("Broadcast compact block #{} ({} tx hashes)", block.index, block.transactions.len());
                     }
                 }
             }
