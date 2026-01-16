@@ -22,6 +22,40 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // Performance optimizations
+    target: 'es2020',
+    minify: 'esbuild',
+    // Code splitting configuration
+    rollupOptions: {
+      output: {
+        // Manual chunks for better caching
+        manualChunks: {
+          // Vendor chunk for React and core libraries
+          'vendor-react': ['react', 'react-dom'],
+          // UI components chunk
+          'vendor-ui': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-tooltip',
+          ],
+          // Charts and visualization
+          'vendor-charts': ['recharts', 'lightweight-charts'],
+          // Animation libraries
+          'vendor-animation': ['framer-motion'],
+        },
+        // Asset file naming for better caching
+        chunkFileNames: 'assets/js/[name]-[hash].js',
+        entryFileNames: 'assets/js/[name]-[hash].js',
+        assetFileNames: 'assets/[ext]/[name]-[hash][extname]',
+      },
+    },
+    // Chunk size warnings
+    chunkSizeWarningLimit: 500,
+    // CSS code splitting
+    cssCodeSplit: true,
+    // Asset inlining threshold (4KB)
+    assetsInlineLimit: 4096,
   },
   server: {
     port: 3000,

@@ -6,23 +6,37 @@ import WalletConnect from "@/components/WalletConnect";
 
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Menu } from "lucide-react";
+import { Menu, Loader2 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { useState } from "react";
-import Dashboard from "@/pages/Dashboard";
-import Blocks from "@/pages/Blocks";
-import BlockDetails from "@/pages/BlockDetails";
-import Transactions from "@/pages/Transactions";
-import TransactionDetails from "@/pages/TransactionDetails";
-import Validators from "@/pages/Validators";
-import Staking from "@/pages/Staking";
-import Governance from "@/pages/Governance";
-import Marketplace from "@/pages/Marketplace";
-import DEX from "@/pages/DEX";
-import Wallet from "@/pages/Wallet";
-import Bridge from "@/pages/Bridge";
-import NotFound from "@/pages/NotFound";
+import { useState, Suspense, lazy } from "react";
 import { cn } from "@/lib/utils";
+
+// Lazy load pages for better initial load performance
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Blocks = lazy(() => import("@/pages/Blocks"));
+const BlockDetails = lazy(() => import("@/pages/BlockDetails"));
+const Transactions = lazy(() => import("@/pages/Transactions"));
+const TransactionDetails = lazy(() => import("@/pages/TransactionDetails"));
+const Validators = lazy(() => import("@/pages/Validators"));
+const Staking = lazy(() => import("@/pages/Staking"));
+const Governance = lazy(() => import("@/pages/Governance"));
+const Marketplace = lazy(() => import("@/pages/Marketplace"));
+const DEX = lazy(() => import("@/pages/DEX"));
+const Wallet = lazy(() => import("@/pages/Wallet"));
+const Bridge = lazy(() => import("@/pages/Bridge"));
+const NotFound = lazy(() => import("@/pages/NotFound"));
+
+// Loading fallback component
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex flex-col items-center gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -46,7 +60,7 @@ function Layout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-20 max-w-screen-2xl items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src="/images/logo_transparent.png" alt="EdgeAI Blockchain" className="h-16 w-auto object-contain" />
+            <img src="/images/logo_transparent.png" alt="EdgeAI Blockchain" className="h-16 w-auto object-contain" loading="lazy" />
           </div>
           
           {/* Desktop Navigation */}
@@ -110,7 +124,9 @@ function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="container py-6 max-w-screen-2xl">
-        {children}
+        <Suspense fallback={<PageLoader />}>
+          {children}
+        </Suspense>
       </main>
       <Toaster />
     </div>
