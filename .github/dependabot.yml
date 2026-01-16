@@ -1,0 +1,67 @@
+version: 2
+updates:
+  # Backend (Rust)
+  - package-ecosystem: "cargo"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Frontend (npm/pnpm)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      react:
+        patterns:
+          - "react*"
+          - "@types/react*"
+      ui:
+        patterns:
+          - "@radix-ui/*"
+          - "tailwindcss*"
+      build:
+        patterns:
+          - "vite*"
+          - "esbuild*"
+          - "typescript*"
+
+  # Smart Contracts (npm/pnpm)
+  - package-ecosystem: "npm"
+    directory: "/bridge/contracts"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "solidity"
+    commit-message:
+      prefix: "chore(deps)"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"

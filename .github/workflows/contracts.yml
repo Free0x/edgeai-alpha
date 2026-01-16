@@ -1,0 +1,109 @@
+name: Smart Contracts CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'bridge/contracts/**'
+      - '.github/workflows/contracts.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'bridge/contracts/**'
+
+jobs:
+  # Compile and test contracts
+  test:
+    name: Test Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+      
+      - name: Cache pnpm modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-contracts-${{ hashFiles('bridge/contracts/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-contracts-
+      
+      - name: Install dependencies
+        working-directory: bridge/contracts
+        run: pnpm install --frozen-lockfile
+      
+      - name: Compile contracts
+        working-directory: bridge/contracts
+        run: pnpm exec hardhat compile
+      
+      - name: Run tests
+        working-directory: bridge/contracts
+        run: pnpm exec hardhat test
+
+  # Security analysis with Slither
+  security:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+      
+      - name: Install dependencies
+        working-directory: bridge/contracts
+        run: pnpm install --frozen-lockfile
+      
+      - name: Compile contracts
+        working-directory: bridge/contracts
+        run: pnpm exec hardhat compile
+      
+      - name: Run Slither
+        uses: crytic/slither-action@v0.3.0
+        with:
+          target: 'bridge/contracts/'
+          slither-args: '--exclude-dependencies'
+        continue-on-error: true
+
+  # Gas optimization report
+  gas-report:
+    name: Gas Report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+      
+      - name: Install dependencies
+        working-directory: bridge/contracts
+        run: pnpm install --frozen-lockfile
+      
+      - name: Generate gas report
+        working-directory: bridge/contracts
+        run: REPORT_GAS=true pnpm exec hardhat test
+        continue-on-error: true
