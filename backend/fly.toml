@@ -30,12 +30,12 @@ primary_region = "sin"  # Singapore - closest to Asia
 
 [checks]
   [checks.health]
-    grace_period = "120s"  # Increased from 30s - blockchain needs time to initialize
-    interval = "30s"       # Increased from 15s
+    grace_period = "300s"  # 5 minutes - blockchain needs time to load data from disk
+    interval = "30s"
     method = "get"
-    path = "/api/status"   # Changed to simpler endpoint
+    path = "/api/status"
     port = 8080
-    timeout = "30s"        # Increased from 10s
+    timeout = "60s"        # Increased timeout for slow responses during startup
     type = "http"
 
 [mounts]
