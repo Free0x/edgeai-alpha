@@ -21,6 +21,7 @@ pub mod dex;
 pub mod cache;
 pub mod rate_limit;
 pub mod metrics;
+pub mod security;
 
 // Authentication exports
 pub use auth::{SignedRequest, AuthData, verify_signed_request, create_sign_message};
@@ -41,3 +42,4 @@ pub use dex::{DexState, configure_dex_routes};
 pub use cache::{ApiCache, CacheStats, ChainStatsCache, create_chain_stats_cache};
 pub use rate_limit::{RateLimiter, RateLimitTier, RateLimitResult, GlobalRateLimiter, create_rate_limiter};
 pub use metrics::{Metrics, MetricsSnapshot, GlobalMetrics, create_metrics};
+pub use security::{SecurityManager, SecurityConfig, SecurityError, GlobalSecurityManager, create_security_manager};
