@@ -521,7 +521,7 @@ export default function Governance() {
     const fetchData = async () => {
       try {
         // Fetch governance stats
-        const statsRes = await fetch("${API_BASE_URL}/governance/stats");
+        const statsRes = await fetch(`${API_BASE_URL}/governance/stats`);
         const statsData = await statsRes.json();
         setStats({
           totalProposals: statsData.total_proposals || 0,
@@ -540,7 +540,7 @@ export default function Governance() {
         });
         
         // Fetch proposals
-        const proposalsRes = await fetch("${API_BASE_URL}/governance/proposals");
+        const proposalsRes = await fetch(`${API_BASE_URL}/governance/proposals`);
         const proposalsData = await proposalsRes.json();
         setProposals(proposalsData.proposals || []);
       } catch (error) {
@@ -625,7 +625,7 @@ export default function Governance() {
       const signedRequest = await createSignedRequest(wallet, proposalData);
       
       const response = await fetch(
-        "${API_BASE_URL}/governance/proposals",
+        `${API_BASE_URL}/governance/proposals`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
