@@ -482,6 +482,100 @@ pub async fn get_proposal_votes(
     }
 }
 
+/// Demo proposal creation request (no signature required)
+#[derive(Debug, Deserialize)]
+pub struct DemoCreateProposalRequest {
+    pub proposer: String,
+    pub title: String,
+    pub description: String,
+    pub proposal_type: ProposalTypeRequest,
+    pub initial_deposit: String,
+}
+
+/// Create a new proposal in demo mode (no signature required)
+/// This endpoint is for demonstration purposes only
+pub async fn create_proposal_demo(
+    governance: web::Data<GovernanceState>,
+    body: web::Json<DemoCreateProposalRequest>,
+) -> impl Responder {
+    let mut gov = governance.write().await;
+
+    let initial_deposit: u128 = body.initial_deposit.parse().unwrap_or(0);
+    let proposal_type: ProposalType = body.proposal_type.clone().into();
+
+    match gov.create_proposal(
+        body.proposer.clone(),
+        body.title.clone(),
+        body.description.clone(),
+        proposal_type,
+        initial_deposit,
+    ) {
+        Ok(proposal_id) => {
+            let proposal = gov.get_proposal(proposal_id).unwrap();
+            let status = match proposal.status {
+                ProposalStatus::VotingPeriod => "voting_period",
+                ProposalStatus::DepositPeriod => "deposit_period",
+                _ => "unknown",
+            };
+
+            HttpResponse::Ok().json(CreateProposalResponse {
+                success: true,
+                proposal_id,
+                status: status.to_string(),
+                message: format!("Proposal {} created successfully (demo mode)", proposal_id),
+            })
+        }
+        Err(e) => HttpResponse::BadRequest().json(serde_json::json!({
+            "success": false,
+            "error": e
+        })),
+    }
+}
+
+/// Demo vote request (no signature required)
+#[derive(Debug, Deserialize)]
+pub struct DemoVoteRequest {
+    pub voter: String,
+    pub option: String,
+    pub voting_power: String,
+}
+
+/// Vote on a proposal in demo mode (no signature required)
+pub async fn vote_on_proposal_demo(
+    governance: web::Data<GovernanceState>,
+    path: web::Path<u64>,
+    body: web::Json<DemoVoteRequest>,
+) -> impl Responder {
+    let proposal_id = path.into_inner();
+    let mut gov = governance.write().await;
+
+    let option = match body.option.to_lowercase().as_str() {
+        "yes" => VoteOption::Yes,
+        "no" => VoteOption::No,
+        "abstain" => VoteOption::Abstain,
+        "no_with_veto" | "veto" => VoteOption::NoWithVeto,
+        _ => {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "success": false,
+                "error": "Invalid vote option. Use: yes, no, abstain, or no_with_veto"
+            }))
+        }
+    };
+
+    let voting_power: u128 = body.voting_power.parse().unwrap_or(1000000000000000000); // Default 1 EDGE
+
+    match gov.vote(body.voter.clone(), proposal_id, option, voting_power) {
+        Ok(()) => HttpResponse::Ok().json(serde_json::json!({
+            "success": true,
+            "message": "Vote recorded successfully (demo mode)"
+        })),
+        Err(e) => HttpResponse::BadRequest().json(serde_json::json!({
+            "success": false,
+            "error": e
+        })),
+    }
+}
+
 /// Configure governance routes
 pub fn configure_governance_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -490,9 +584,11 @@ pub fn configure_governance_routes(cfg: &mut web::ServiceConfig) {
             .route("/proposals", web::get().to(get_proposals))
             .route("/proposals/active", web::get().to(get_active_proposals))
             .route("/proposals", web::post().to(create_proposal))
+            .route("/proposals/demo", web::post().to(create_proposal_demo))
             .route("/proposals/{id}", web::get().to(get_proposal))
             .route("/proposals/{id}/deposit", web::post().to(add_deposit))
             .route("/proposals/{id}/vote", web::post().to(vote_on_proposal))
+            .route("/proposals/{id}/vote/demo", web::post().to(vote_on_proposal_demo))
             .route("/proposals/{id}/votes", web::get().to(get_proposal_votes)),
     );
 }
