@@ -166,12 +166,17 @@ export default function Bridge() {
   useEffect(() => {
     const savedWallet = localStorage.getItem('edgeai_wallet');
     if (savedWallet) {
-      const wallet = JSON.parse(savedWallet);
-      setEdgeaiAddress(wallet.address);
-      addLog(`EdgeAI wallet loaded: ${wallet.address.slice(0, 15)}...`);
-      
-      // Fetch balance
-      fetchEdgeaiBalance(wallet.address);
+      try {
+        const wallet = JSON.parse(savedWallet);
+        setEdgeaiAddress(wallet.address);
+        addLog(`EdgeAI wallet loaded: ${wallet.address.slice(0, 15)}...`);
+        
+        // Fetch balance
+        fetchEdgeaiBalance(wallet.address);
+      } catch (e) {
+        addLog('Failed to load EdgeAI wallet: invalid data');
+        localStorage.removeItem('edgeai_wallet');
+      }
     }
   }, []);
   
