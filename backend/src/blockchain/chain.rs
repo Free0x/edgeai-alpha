@@ -623,7 +623,7 @@ impl Blockchain {
     /// Prune old blocks from disk to save space
     /// Keeps only the last KEEP_FULL_BLOCKS blocks with full transaction data
     fn prune_disk_blocks(&self) {
-        const KEEP_FULL_BLOCKS: u64 = 10000; // Keep last 10k blocks with full data
+        const KEEP_FULL_BLOCKS: u64 = 5000; // Keep last 5k blocks with full data (reduced for disk space)
         
         if let Some(ref storage) = self.storage {
             match storage.prune_old_blocks(self.total_blocks, KEEP_FULL_BLOCKS) {
@@ -902,8 +902,8 @@ impl Blockchain {
         // Prune old blocks from memory to prevent OOM
         self.prune_memory();
         
-        // Prune old blocks from disk every 1000 blocks to save space
-        if self.total_blocks % 1000 == 0 {
+        // Prune old blocks from disk every 500 blocks to save space
+        if self.total_blocks % 500 == 0 {
             self.prune_disk_blocks();
         }
         

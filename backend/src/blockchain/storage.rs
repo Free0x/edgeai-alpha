@@ -405,7 +405,8 @@ impl Storage {
     }
     
     /// Prune old blocks to save disk space
-    /// Keeps only the last `keep_blocks` full blocks, older blocks are pruned to headers only
+    /// - Blocks older than `keep_blocks * 2` are completely deleted
+    /// - Blocks between `keep_blocks` and `keep_blocks * 2` are pruned to headers only
     pub fn prune_old_blocks(&self, current_height: u64, keep_blocks: u64) -> Result<usize, String> {
         if current_height <= keep_blocks {
             return Ok(0);
@@ -416,45 +417,65 @@ impl Storage {
         let cf_txs = self.db.cf_handle(CF_TRANSACTIONS)
             .ok_or("CF_TRANSACTIONS not found")?;
         
-        let prune_before = current_height - keep_blocks;
+        let prune_to_header_before = current_height - keep_blocks;
+        let delete_before = if current_height > keep_blocks * 2 {
+            current_height - keep_blocks * 2
+        } else {
+            0
+        };
+        
         let mut pruned_count = 0;
+        let mut deleted_count = 0;
         let mut batch = WriteBatch::default();
         
-        // Prune blocks older than prune_before
-        for index in 0..prune_before {
+        // Completely delete very old blocks (older than keep_blocks * 2)
+        for index in 0..delete_before {
+            let index_key = index.to_be_bytes();
+            batch.delete_cf(&cf_blocks, &index_key);
+            deleted_count += 1;
+        }
+        
+        // Prune blocks to headers only (between keep_blocks and keep_blocks * 2)
+        for index in delete_before..prune_to_header_before {
             let index_key = index.to_be_bytes();
             
-            // Get the block to extract transaction hashes for cleanup
             if let Ok(Some(block_data)) = self.db.get_cf(&cf_blocks, &index_key) {
                 if let Ok(block) = serde_json::from_slice::<Block>(&block_data) {
+                    // Skip if already pruned (no transactions)
+                    if block.transactions.is_empty() {
+                        continue;
+                    }
+                    
                     // Create a pruned version (header only, no transactions)
                     let pruned_block = Block {
                         index: block.index,
                         header: block.header,
-                        transactions: Vec::new(), // Remove transactions
+                        transactions: Vec::new(),
                         hash: block.hash,
                         validator: block.validator,
                     };
                     
-                    // Store pruned block
                     if let Ok(pruned_data) = serde_json::to_vec(&pruned_block) {
                         batch.put_cf(&cf_blocks, &index_key, &pruned_data);
                         pruned_count += 1;
                     }
-                    
-                    // Note: We keep transaction index for lookups, but the actual tx data
-                    // is removed from the block. API will return "pruned" for old txs.
                 }
             }
         }
         
-        if pruned_count > 0 {
+        let total_affected = deleted_count + pruned_count;
+        if total_affected > 0 {
             self.db.write(batch)
                 .map_err(|e| format!("Failed to write pruned blocks: {}", e))?;
-            info!("Pruned {} old blocks (kept headers only)", pruned_count);
+            if deleted_count > 0 {
+                info!("Deleted {} very old blocks completely", deleted_count);
+            }
+            if pruned_count > 0 {
+                info!("Pruned {} blocks to headers only", pruned_count);
+            }
         }
         
-        Ok(pruned_count)
+        Ok(total_affected)
     }
     
     /// Trigger manual compaction to reclaim disk space
