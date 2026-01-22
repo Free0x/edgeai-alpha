@@ -92,6 +92,7 @@ export function loadDemoWallet(): Wallet | null {
       },
     };
   } catch {
+    localStorage.removeItem(DEMO_WALLET_KEY);
     return null;
   }
 }

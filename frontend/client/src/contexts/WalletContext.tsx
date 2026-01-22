@@ -166,6 +166,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         fetchEdgeAIBalance(wallet.address);
       } catch (err) {
         console.error("Failed to load EdgeAI wallet:", err);
+        localStorage.removeItem("edgeai_wallet");
       }
     }
   }, []);
