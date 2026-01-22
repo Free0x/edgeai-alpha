@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiCall, Transaction } from "@/lib/api";
@@ -170,7 +170,13 @@ export default function TransactionDetails() {
                 </div>
 
                 <div className="bg-black/50 p-4 rounded-lg border border-border font-mono text-sm text-green-400 overflow-x-auto">
-                  <pre>{JSON.stringify(JSON.parse((transaction as IoTTransaction).dataPayload), null, 2)}</pre>
+                  <pre>{(() => {
+                    try {
+                      return JSON.stringify(JSON.parse((transaction as IoTTransaction).dataPayload), null, 2);
+                    } catch {
+                      return (transaction as IoTTransaction).dataPayload;
+                    }
+                  })()}</pre>
                 </div>
               </CardContent>
             </Card>
