@@ -1125,7 +1125,7 @@ pub async fn external_submit(
         );
         // Set device as active for external devices (skip verification)
         device.status = DeviceStatus::Active;
-        device.last_heartbeat = now;
+        device.heartbeat(); // Update last activity time
         let _ = registry.register_device(device);
         info!("Auto-registered external device: {}", &body.device);
     } else {
