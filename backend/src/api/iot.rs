@@ -1153,7 +1153,7 @@ pub async fn external_submit(
 
 /// Calculate quality score for external submissions
 fn calculate_external_quality_score(req: &ExternalSubmitRequest) -> f64 {
-    let mut score = 0.5; // Base score
+    let mut score: f64 = 0.5; // Base score
     
     // GPS accuracy bonus (better accuracy = higher score)
     // accuracy_m < 10 is excellent, < 50 is good, < 100 is acceptable
