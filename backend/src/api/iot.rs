@@ -1110,7 +1110,7 @@ pub async fn external_submit(
     // Check if device exists, if not create a temporary record
     if registry.get_device(&body.device).is_none() {
         // Auto-register the external device
-        let device = IoTDevice::new(
+        let mut device = IoTDevice::new(
             body.device.clone(), // Use device ID as owner for external devices
             format!("external_key_{}", &body.device),
             IoTDeviceType::Custom(body.category.clone()),
@@ -1123,8 +1123,20 @@ pub async fn external_submit(
                 altitude: Some(body.telemetry.altitude_m),
             },
         );
+        // Set device as active for external devices (skip verification)
+        device.status = DeviceStatus::Active;
+        device.last_heartbeat = now;
         let _ = registry.register_device(device);
         info!("Auto-registered external device: {}", &body.device);
+    } else {
+        // Update heartbeat for existing device
+        if let Some(device) = registry.get_device_mut(&body.device) {
+            device.heartbeat();
+            // Ensure device is active
+            if device.status != DeviceStatus::Active {
+                device.status = DeviceStatus::Active;
+            }
+        }
     }
     
     match registry.record_contribution(contribution) {
