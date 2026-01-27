@@ -1123,6 +1123,8 @@ pub async fn external_submit(
                 altitude: Some(body.telemetry.altitude_m),
             },
         );
+        // Override the auto-generated device_id with the provided one
+        device.device_id = body.device.clone();
         // Set device as active for external devices (skip verification)
         device.status = DeviceStatus::Active;
         device.heartbeat(); // Update last activity time
