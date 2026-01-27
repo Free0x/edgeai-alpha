@@ -530,6 +530,45 @@ pub struct SubmitDataRequest {
     pub metadata: Option<HashMap<String, String>>,
 }
 
+// ============ External/Simplified API Types ============
+
+/// Telemetry data from external devices (simplified format)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExternalTelemetry {
+    pub accuracy_m: f64,
+    pub altitude_m: f64,
+    pub heading_deg: f64,
+    pub source: String,
+    pub speed_accuracy_mps: f64,
+    pub speed_mps: f64,
+    pub ts: i64,
+}
+
+/// Simplified external data submission request
+/// This format is designed for easy integration by external developers
+#[derive(Debug, Deserialize)]
+pub struct ExternalSubmitRequest {
+    pub device: String,
+    pub category: String,
+    pub telemetry: ExternalTelemetry,
+    pub lat: f64,
+    pub lng: f64,
+    pub ts: i64,
+    pub source: String,
+}
+
+/// Response for external data submission
+#[derive(Debug, Serialize)]
+pub struct ExternalSubmitResponse {
+    pub contribution_id: String,
+    pub device: String,
+    pub category: String,
+    pub quality_score: f64,
+    pub reward_points: f64,
+    pub timestamp: u64,
+    pub data_hash: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct HeartbeatRequest {
     pub device_id: String,
@@ -967,6 +1006,198 @@ pub async fn get_device_leaderboard(
     HttpResponse::Ok().json(ApiResponse::success(leaderboard))
 }
 
+// ============ External/Simplified API Endpoint ============
+
+/// POST /api/external/submit - Simplified data submission for external developers
+/// 
+/// This endpoint provides a simplified interface for external applications to submit
+/// IoT data without requiring device registration or cryptographic signatures.
+/// 
+/// Features:
+/// - No device registration required
+/// - No signature verification
+/// - Automatic device tracking
+/// - Quality scoring and reward calculation
+pub async fn external_submit(
+    data: web::Data<IoTState>,
+    body: web::Json<ExternalSubmitRequest>,
+) -> impl Responder {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    
+    // Validate source field
+    if body.source != "external" {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            "Invalid source: must be 'external' for this endpoint"
+        ));
+    }
+    
+    // Validate coordinates
+    if body.lat < -90.0 || body.lat > 90.0 || body.lng < -180.0 || body.lng > 180.0 {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            "Invalid coordinates: lat must be -90 to 90, lng must be -180 to 180"
+        ));
+    }
+    
+    // Serialize the request data for hashing
+    let data_json = serde_json::json!({
+        "device": body.device,
+        "category": body.category,
+        "telemetry": body.telemetry,
+        "lat": body.lat,
+        "lng": body.lng,
+        "ts": body.ts,
+        "source": body.source,
+    });
+    let data_str = serde_json::to_string(&data_json).unwrap_or_default();
+    let data_size = data_str.len() as u64;
+    
+    // Generate data hash
+    let mut hasher = Sha256::new();
+    hasher.update(data_str.as_bytes());
+    let hash = hasher.finalize();
+    let data_hash = format!("ext_{:08x}", u32::from_le_bytes([hash[0], hash[1], hash[2], hash[3]]));
+    
+    // Generate contribution ID
+    let mut id_hasher = Sha256::new();
+    id_hasher.update(body.device.as_bytes());
+    id_hasher.update(data_hash.as_bytes());
+    id_hasher.update(now.to_le_bytes());
+    let id_hash = id_hasher.finalize();
+    let contribution_id = format!("ext_contrib_{}", hex::encode(&id_hash[..12]));
+    
+    // Calculate quality score based on telemetry data
+    let quality_score = calculate_external_quality_score(&body);
+    
+    // Calculate reward points (simplified calculation)
+    let base_points = 10.0;
+    let quality_multiplier = 0.5 + (quality_score * 1.5);
+    let reward_points = base_points * quality_multiplier;
+    
+    // Create location from request
+    let location = GeoLocation {
+        country_code: "XX".to_string(), // Unknown, could be determined by reverse geocoding
+        region_code: None,
+        city: None,
+        latitude: Some(body.lat),
+        longitude: Some(body.lng),
+        altitude: Some(body.telemetry.altitude_m),
+    };
+    
+    // Create contribution record
+    let contribution = DataContribution {
+        contribution_id: contribution_id.clone(),
+        device_id: body.device.clone(),
+        data_type: body.category.clone(),
+        data_hash: data_hash.clone(),
+        data_size_bytes: data_size,
+        timestamp: now,
+        location: Some(location),
+        metadata: HashMap::new(),
+        quality_score,
+        freshness_score: 1.0,
+        uniqueness_score: 0.8,
+        base_reward: reward_points,
+        bonus_reward: 0.0,
+        total_reward: reward_points,
+    };
+    
+    // Record the contribution
+    let mut registry = data.registry.write().await;
+    
+    // Check if device exists, if not create a temporary record
+    if registry.get_device(&body.device).is_none() {
+        // Auto-register the external device
+        let device = IoTDevice::new(
+            body.device.clone(), // Use device ID as owner for external devices
+            format!("external_key_{}", &body.device),
+            IoTDeviceType::Custom(body.category.clone()),
+            GeoLocation {
+                country_code: "XX".to_string(),
+                region_code: None,
+                city: None,
+                latitude: Some(body.lat),
+                longitude: Some(body.lng),
+                altitude: Some(body.telemetry.altitude_m),
+            },
+        );
+        let _ = registry.register_device(device);
+        info!("Auto-registered external device: {}", &body.device);
+    }
+    
+    match registry.record_contribution(contribution) {
+        Ok(contrib) => {
+            info!("External contribution recorded: {} from {} (category: {}, quality: {:.2}, points: {:.2})",
+                &contrib.contribution_id, &body.device, &body.category, quality_score, reward_points);
+            
+            let response = ExternalSubmitResponse {
+                contribution_id: contrib.contribution_id,
+                device: body.device.clone(),
+                category: body.category.clone(),
+                quality_score,
+                reward_points,
+                timestamp: now,
+                data_hash,
+            };
+            
+            HttpResponse::Ok().json(ApiResponse::success(response))
+        }
+        Err(e) => {
+            warn!("External contribution failed: {} - {}", &body.device, e);
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(&e))
+        }
+    }
+}
+
+/// Calculate quality score for external submissions
+fn calculate_external_quality_score(req: &ExternalSubmitRequest) -> f64 {
+    let mut score = 0.5; // Base score
+    
+    // GPS accuracy bonus (better accuracy = higher score)
+    // accuracy_m < 10 is excellent, < 50 is good, < 100 is acceptable
+    let accuracy_bonus = if req.telemetry.accuracy_m < 10.0 {
+        0.25
+    } else if req.telemetry.accuracy_m < 50.0 {
+        0.15
+    } else if req.telemetry.accuracy_m < 100.0 {
+        0.08
+    } else {
+        0.0
+    };
+    score += accuracy_bonus;
+    
+    // Category bonus (some categories are more valuable)
+    let category_bonus = match req.category.as_str() {
+        "SmartCity" => 0.15,
+        "DePIN" => 0.15,
+        "Healthcare" => 0.20,
+        "Agriculture" => 0.12,
+        "Transportation" => 0.12,
+        "Environment" => 0.10,
+        _ => 0.05,
+    };
+    score += category_bonus;
+    
+    // Freshness bonus (data submitted close to collection time)
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let age_secs = (now - req.ts).abs();
+    let freshness_bonus = if age_secs < 60 {
+        0.10 // Less than 1 minute old
+    } else if age_secs < 300 {
+        0.05 // Less than 5 minutes old
+    } else {
+        0.0
+    };
+    score += freshness_bonus;
+    
+    score.clamp(0.0, 1.0)
+}
+
 // ============ Router Configuration ============
 
 pub fn configure_iot_routes(cfg: &mut web::ServiceConfig) {
@@ -985,5 +1216,8 @@ pub fn configure_iot_routes(cfg: &mut web::ServiceConfig) {
         
         // Device operations
         .route("/api/iot/heartbeat", web::post().to(device_heartbeat))
-        .route("/api/iot/rewards/claim", web::post().to(claim_rewards));
+        .route("/api/iot/rewards/claim", web::post().to(claim_rewards))
+        
+        // External/Simplified API for third-party developers
+        .route("/api/external/submit", web::post().to(external_submit));
 }
