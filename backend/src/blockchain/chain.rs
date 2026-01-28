@@ -21,7 +21,7 @@ use crate::blockchain::storage::Storage;
 const DATA_DIR: &str = "/data";
 const BLOCKS_FILE: &str = "blocks.jsonl";  // JSON Lines format for append-only
 const STATE_FILE: &str = "state.json";     // Separate state file
-const MAX_BLOCKS_IN_MEMORY: usize = 100;   // Only keep recent blocks in RAM
+const MAX_BLOCKS_IN_MEMORY: usize = 30;    // Reduced: Only keep 30 recent blocks in RAM to save memory
 
 /// Account state in the blockchain
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -756,6 +756,15 @@ impl Blockchain {
         
         let tx_hash = tx.hash.clone();
         let tx_type = tx.tx_type.clone();
+        
+        // Memory optimization: limit pending transactions to prevent OOM
+        const MAX_PENDING_TX: usize = 500;
+        if self.pending_transactions.len() >= MAX_PENDING_TX {
+            // Remove oldest transactions when limit reached
+            self.pending_transactions.drain(0..100);
+            warn!("Pending pool overflow, removed 100 oldest transactions");
+        }
+        
         self.pending_transactions.push(tx);
         info!("Transaction {} added to pending pool (type: {:?})", &tx_hash[..8], tx_type);
         

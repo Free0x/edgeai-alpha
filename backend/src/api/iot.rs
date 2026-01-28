@@ -450,9 +450,10 @@ impl IoTRegistry {
         // Store contribution record
         self.contributions.push(contribution.clone());
 
-        // Keep only last 10000 contributions in memory
-        if self.contributions.len() > 10000 {
-            self.contributions.remove(0);
+        // Keep only last 500 contributions in memory to save RAM
+        if self.contributions.len() > 500 {
+            // Remove oldest half when limit reached
+            self.contributions.drain(0..250);
         }
 
         Ok(contribution)

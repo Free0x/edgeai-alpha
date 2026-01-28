@@ -51,15 +51,25 @@ impl Storage {
         let mut opts = Options::default();
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
-        opts.set_max_open_files(256);
-        opts.set_write_buffer_size(32 * 1024 * 1024); // 32MB write buffer (reduced)
+        
+        // Memory optimization: reduce cache sizes significantly
+        opts.set_max_open_files(64);  // Reduced from 256
+        opts.set_write_buffer_size(8 * 1024 * 1024); // 8MB write buffer (reduced from 32MB)
         opts.set_max_write_buffer_number(2);
-        opts.set_target_file_size_base(32 * 1024 * 1024); // 32MB SST files (reduced)
+        opts.set_target_file_size_base(16 * 1024 * 1024); // 16MB SST files (reduced from 32MB)
         opts.set_level_zero_file_num_compaction_trigger(2); // More aggressive compaction
+        
+        // Disable block cache to save memory (use OS page cache instead)
+        let mut block_opts = rocksdb::BlockBasedOptions::default();
+        block_opts.set_block_cache(&rocksdb::Cache::new_lru_cache(8 * 1024 * 1024)); // 8MB block cache (minimal)
+        block_opts.set_cache_index_and_filter_blocks(false); // Don't cache index/filter
+        opts.set_block_based_table_factory(&block_opts);
+        
+        // Compression settings
         opts.set_compression_type(rocksdb::DBCompressionType::Zstd); // Better compression
         opts.set_bottommost_compression_type(rocksdb::DBCompressionType::Zstd);
         opts.set_compression_per_level(&[
-            rocksdb::DBCompressionType::None,  // L0: no compression for speed
+            rocksdb::DBCompressionType::Lz4,   // L0: fast compression
             rocksdb::DBCompressionType::Lz4,   // L1: fast compression
             rocksdb::DBCompressionType::Zstd,  // L2+: best compression
             rocksdb::DBCompressionType::Zstd,
@@ -67,6 +77,10 @@ impl Storage {
             rocksdb::DBCompressionType::Zstd,
         ]);
         opts.set_level_compaction_dynamic_level_bytes(true);
+        
+        // Additional memory optimizations
+        opts.set_optimize_filters_for_hits(true);  // Optimize bloom filters
+        opts.set_max_background_jobs(2);  // Limit background threads
         
         // Define column families
         let cf_names = vec![
