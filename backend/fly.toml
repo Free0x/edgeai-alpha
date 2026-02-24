@@ -35,7 +35,7 @@ primary_region = "sin"  # Singapore - closest to Asia
     method = "get"
     path = "/api/status"
     port = 8080
-    timeout = "120s"       # Increased timeout for slow responses during startup
+    timeout = "60s"        # Maximum allowed timeout
     type = "http"
 
 [mounts]
