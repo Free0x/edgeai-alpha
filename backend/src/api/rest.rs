@@ -190,6 +190,45 @@ pub async fn get_transaction(
     }
 }
 
+/// Get recent transactions (from in-memory blocks)
+pub async fn get_recent_transactions(
+    data: web::Data<AppState>,
+    query: web::Query<PaginationQuery>,
+) -> impl Responder {
+    let blockchain = data.blockchain.read().await;
+    let offset = query.offset.unwrap_or(0) as usize;
+    let limit = query.limit.unwrap_or(20) as usize;
+    
+    // Collect transactions from in-memory blocks (most recent first)
+    let mut all_txs: Vec<&Transaction> = Vec::new();
+    for block in blockchain.chain.iter().rev() {
+        for tx in block.transactions.iter().rev() {
+            all_txs.push(tx);
+        }
+    }
+    
+    let total = all_txs.len();
+    let txs: Vec<&Transaction> = all_txs.into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect();
+    
+    #[derive(Serialize)]
+    struct TransactionsResponse<'a> {
+        transactions: Vec<&'a Transaction>,
+        total: usize,
+        offset: usize,
+        limit: usize,
+    }
+    
+    HttpResponse::Ok().json(TransactionsResponse {
+        transactions: txs,
+        total,
+        offset,
+        limit,
+    })
+}
+
 /// Get pending transactions
 pub async fn get_pending_transactions(data: web::Data<AppState>) -> impl Responder {
     let blockchain = data.blockchain.read().await;
@@ -530,8 +569,9 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         .route("/api/blocks/hash/{hash}", web::get().to(get_block_by_hash))
         
         // Transaction routes
-        .route("/api/transactions/{hash}", web::get().to(get_transaction))
+        .route("/api/transactions", web::get().to(get_recent_transactions))
         .route("/api/transactions/pending", web::get().to(get_pending_transactions))
+        .route("/api/transactions/{hash}", web::get().to(get_transaction))
         .route("/api/transactions/transfer", web::post().to(create_transfer))
         .route("/api/transactions/contribute", web::post().to(create_data_contribution))
         
