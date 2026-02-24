@@ -24,18 +24,18 @@ primary_region = "sin"  # Singapore - closest to Asia
     soft_limit = 80
 
 [[vm]]
-  cpu_kind = "shared"
+  cpu_kind = "performance"
   cpus = 1
-  memory_mb = 2048  # Increased to 2GB for blockchain operations
+  memory_mb = 4096  # 4GB for blockchain operations
 
 [checks]
   [checks.health]
-    grace_period = "300s"  # 5 minutes - blockchain needs time to load data from disk
+    grace_period = "600s"  # 10 minutes - blockchain needs time to load data from disk
     interval = "30s"
     method = "get"
     path = "/api/status"
     port = 8080
-    timeout = "60s"        # Increased timeout for slow responses during startup
+    timeout = "120s"       # Increased timeout for slow responses during startup
     type = "http"
 
 [mounts]

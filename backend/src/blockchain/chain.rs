@@ -235,12 +235,20 @@ impl Blockchain {
         let total_supply = storage.get_total_supply();
         let total_staked = storage.get_total_staked();
         
-        // Load accounts from file (RocksDB account loading is optional optimization)
+        // Load accounts from file - optimized to skip data_registry for memory savings
         let state_path = Path::new(DATA_DIR).join(STATE_FILE);
         let state = if state_path.exists() {
             if let Ok(data) = fs::read_to_string(&state_path) {
                 if let Ok((s, _)) = serde_json::from_str::<(ChainState, ChainMetadata)>(&data) {
-                    s
+                    info!("Loaded state with {} accounts, clearing data_registry to save memory", s.accounts.len());
+                    // Keep accounts but clear data_registry to save memory
+                    // data_registry can be rebuilt from blocks if needed
+                    ChainState {
+                        accounts: s.accounts,
+                        data_registry: HashMap::new(),
+                        total_supply: s.total_supply,
+                        total_staked: s.total_staked,
+                    }
                 } else {
                     ChainState {
                         accounts: HashMap::new(),
