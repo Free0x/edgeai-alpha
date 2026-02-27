@@ -392,6 +392,7 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin_fn(|origin, _req_head| {
                 origin.as_bytes().ends_with(b".vercel.app") || 
                 origin.as_bytes().ends_with(b".manus.space") ||
+                origin.as_bytes().ends_with(b".manus.computer") ||
                 origin.as_bytes().ends_with(b"edgeaiexplorer.org")
             })
             .allowed_origin("https://edgeai-chain.github.io")
