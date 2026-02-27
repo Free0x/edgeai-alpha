@@ -39,7 +39,7 @@ export default function WalletConnect() {
     edgeai,
     connectMetaMask,
     disconnectMetaMask,
-    switchToBscTestnet,
+    switchToBscMainnet,
     createEdgeAIWallet,
     isLoading,
     error,
@@ -161,7 +161,7 @@ export default function WalletConnect() {
                     ? "bg-green-900/50 text-green-400" 
                     : "bg-yellow-900/50 text-yellow-400"
                 }`}>
-                  {metamask.isCorrectNetwork ? "BSC Testnet" : `Chain ${metamask.chainId}`}
+                  {metamask.isCorrectNetwork ? "BSC Mainnet" : `Chain ${metamask.chainId}`}
                 </span>
               )}
             </div>
@@ -184,7 +184,7 @@ export default function WalletConnect() {
                       )}
                     </button>
                     <a
-                      href={`https://testnet.bscscan.com/address/${metamask.address}`}
+                      href={`https://bscscan.com/address/${metamask.address}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-1 hover:bg-gray-700 rounded"
@@ -198,22 +198,22 @@ export default function WalletConnect() {
                 {/* 余额 */}
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="bg-gray-900 rounded-lg p-2">
-                    <div className="text-gray-500 text-xs">tBNB</div>
+                    <div className="text-gray-500 text-xs">BNB</div>
                     <div className="text-white font-medium text-sm">{formatBalance(metamask.balance)}</div>
                   </div>
                   <div className="bg-gray-900 rounded-lg p-2">
-                    <div className="text-gray-500 text-xs">wEDGE</div>
-                    <div className="text-purple-400 font-medium text-sm">{formatBalance(metamask.wEdgeBalance)}</div>
+                    <div className="text-gray-500 text-xs">EDGEAI</div>
+                    <div className="text-purple-400 font-medium text-sm">{formatBalance(metamask.edgeaiTokenBalance)}</div>
                   </div>
                 </div>
 
                 {/* 网络切换 */}
                 {!metamask.isCorrectNetwork && (
                   <button
-                    onClick={switchToBscTestnet}
+                    onClick={switchToBscMainnet}
                     className="w-full py-2 bg-yellow-600 hover:bg-yellow-500 rounded-lg text-xs sm:text-sm font-medium text-white"
                   >
-                    Switch to BSC Testnet
+                    Switch to BSC Mainnet
                   </button>
                 )}
 
