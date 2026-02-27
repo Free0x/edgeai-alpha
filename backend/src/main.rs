@@ -27,9 +27,11 @@ use network::{NetworkManager, NodeType};
 use network::libp2p_network::{NetworkConfig, NetworkCommand, NetworkEvent, start_p2p_network};
 use api::{
     AppState, DeviceState, StakingState, ContractState, GovernanceState, DexState, IoTState,
+    BridgeState,
     configure_routes, configure_wallet_routes, configure_data_routes, 
     configure_device_routes, configure_staking_routes, configure_contract_routes,
-    configure_governance_routes, configure_dex_routes, configure_iot_routes
+    configure_governance_routes, configure_dex_routes, configure_iot_routes,
+    configure_bridge_routes
 };
 use contracts::WasmRuntime;
 
@@ -219,6 +221,9 @@ async fn main() -> std::io::Result<()> {
         registry: Arc::new(RwLock::new(api::iot::IoTRegistry::new())),
     });
     info!("IoT Registry initialized for external device integration");
+
+    let bridge_state = web::Data::new(BridgeState::new(blockchain.clone()));
+    info!("Bridge module initialized (semi-automatic, multi-chain ready)");
 
     // Start P2P event handler
     if let Some(mut event_rx) = p2p_event_rx {
@@ -416,6 +421,7 @@ async fn main() -> std::io::Result<()> {
             .configure(configure_governance_routes)
             .configure(|cfg| configure_dex_routes(cfg, dex_state.clone()))
             .configure(configure_iot_routes)
+            .configure(|cfg| configure_bridge_routes(cfg, bridge_state.clone()))
             .service(Files::new("/", "./static").index_file("index.html"))
     })
     .bind(bind_address)?

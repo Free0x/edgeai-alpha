@@ -1312,6 +1312,52 @@ impl Blockchain {
         txs
     }
     
+    /// Get a reference to OceanBase storage (for bridge and other modules)
+    pub fn get_ob_storage(&self) -> &Option<OceanBaseStorage> {
+        &self.ob_storage
+    }
+
+    /// Internal transfer between two addresses (used by bridge, staking, etc.)
+    /// Returns the transaction hash on success.
+    pub fn internal_transfer(&mut self, from: &str, to: &str, amount: u64) -> Result<String, String> {
+        // Validate sender balance
+        let sender_balance = self.get_balance(from);
+        if sender_balance < amount {
+            return Err(format!(
+                "Insufficient balance: {} has {} EDGE, needs {}",
+                from, sender_balance, amount
+            ));
+        }
+
+        // Debit sender
+        if let Some(account) = self.state.accounts.get_mut(from) {
+            account.balance -= amount;
+            account.nonce += 1;
+        } else {
+            return Err(format!("Sender account not found: {}", from));
+        }
+
+        // Credit recipient (create account if it doesn't exist)
+        let recipient = self.state.accounts
+            .entry(to.to_string())
+            .or_insert_with(|| Account::new(to.to_string()));
+        recipient.balance += amount;
+
+        // Generate a deterministic hash for this internal transfer
+        use sha2::{Sha256, Digest};
+        let hash_input = format!("internal_{}_{}_{}_{}", from, to, amount, Utc::now().timestamp_millis());
+        let mut hasher = Sha256::new();
+        hasher.update(hash_input.as_bytes());
+        let hash = format!("{:x}", hasher.finalize());
+
+        info!("Internal transfer: {} → {} ({} EDGE), hash: {}", from, to, amount, &hash[..8]);
+
+        // Persist updated accounts to OceanBase asynchronously
+        // (will be synced on next block persist cycle)
+
+        Ok(hash)
+    }
+
     /// Get blockchain stats with PoIE network metrics
     pub fn get_stats(&self) -> ChainStats {
         let height = self.total_blocks;

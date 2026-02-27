@@ -30,6 +30,7 @@ pub mod security;
 pub mod prometheus;
 pub mod iot;
 pub mod rewards;
+pub mod bridge;
 
 // Authentication exports
 pub use auth::{SignedRequest, AuthData, verify_signed_request, create_sign_message};
@@ -47,6 +48,7 @@ pub use governance::{GovernanceState, configure_governance_routes};
 pub use dex::{DexState, configure_dex_routes};
 pub use iot::{IoTState, IoTRegistry, configure_iot_routes};
 pub use rewards::{RewardsState, RewardsSystem, configure_rewards_routes};
+pub use bridge::{BridgeState, configure_bridge_routes};
 
 // Performance module exports
 pub use cache::{ApiCache, CacheStats, ChainStatsCache, create_chain_stats_cache};
