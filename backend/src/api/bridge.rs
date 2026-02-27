@@ -752,12 +752,12 @@ pub async fn bridge_stats(
         .fetch_one(ob.pool())
         .await
         {
-            stats.total_requests = row.get::<i64, _>("total") as u64;
-            stats.pending_requests = row.get::<i64, _>("pending") as u64;
-            stats.completed_requests = row.get::<i64, _>("completed") as u64;
-            stats.total_volume_locked = row.get::<i64, _>("vol_locked") as u64;
-            stats.total_volume_released = row.get::<i64, _>("vol_released") as u64;
-            stats.total_fees_collected = row.get::<i64, _>("fees") as u64;
+            stats.total_requests = row.try_get::<i64, _>("total").unwrap_or(0) as u64;
+            stats.pending_requests = row.try_get::<i64, _>("pending").unwrap_or(0) as u64;
+            stats.completed_requests = row.try_get::<i64, _>("completed").unwrap_or(0) as u64;
+            stats.total_volume_locked = row.try_get::<i64, _>("vol_locked").unwrap_or(0) as u64;
+            stats.total_volume_released = row.try_get::<i64, _>("vol_released").unwrap_or(0) as u64;
+            stats.total_fees_collected = row.try_get::<i64, _>("fees").unwrap_or(0) as u64;
         }
     }
 
