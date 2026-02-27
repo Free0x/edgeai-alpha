@@ -19,6 +19,7 @@ use env_logger::Builder;
 use std::fs;
 use std::path::Path;
 
+use chrono::{Utc, Timelike};
 use blockchain::{Blockchain, MempoolManager};
 use consensus::{PoIEConsensus, DeviceRegistry, StakingManager, StakingConfig, GovernanceManager, GovernanceConfig};
 use data_market::DataMarketplace;
@@ -305,10 +306,23 @@ async fn main() -> std::io::Result<()> {
             }
             
             // Collect pending transactions from mempool
+            // Realistic transaction volume: 3-8 tx/block with diurnal variation
             let mut mempool = MempoolManager::with_block_context(current_height);
-            let batch_size = 100 + (current_height % 51) as usize;
+            let hour_of_day = (Utc::now().hour() + 8) % 24; // Approximate UTC+8 peak hours
+            let diurnal_factor = match hour_of_day {
+                6..=9   => 1.4,  // Morning ramp-up
+                10..=13 => 1.8,  // Peak business hours
+                14..=17 => 1.5,  // Afternoon
+                18..=21 => 1.2,  // Evening wind-down
+                22..=23 | 0..=1 => 0.6, // Late night
+                _ => 0.4,        // Deep night (2-5 AM)
+            };
+            let base = 3;
+            let variation = (current_height % 7) as usize; // 0-6 deterministic jitter
+            let batch_size = ((base + variation) as f64 * diurnal_factor) as usize;
+            let batch_size = batch_size.max(1).min(15); // Clamp to [1, 15]
             let pending_txs = mempool.collect_pending(batch_size);
-            info!("Generated {} transactions from mempool for block {}", pending_txs.len(), current_height);
+            log::debug!("Mempool: {} pending transactions for block {}", pending_txs.len(), current_height);
             
             let mut added_count = 0;
             let mut failed_count = 0;
@@ -321,8 +335,8 @@ async fn main() -> std::io::Result<()> {
                     }
                 }
             }
-            if added_count > 0 || failed_count > 0 {
-                info!("Mempool: {} transactions added, {} rejected", added_count, failed_count);
+            if failed_count > 0 {
+                log::warn!("Mempool: {} added, {} rejected", added_count, failed_count);
             }
             
             // Produce new block

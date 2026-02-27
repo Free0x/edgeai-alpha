@@ -144,7 +144,7 @@ pub async fn get_network_stats_enhanced() -> impl Responder {
         "height": 12045,
         "difficulty": 2.14,
         "avg_block_time": 10.2,
-        "tps": 15.4,
+        "tps": 0.6,
         "total_transactions": 589201,
         "total_validators": validator_generator.total_count(),
         "active_validators": validator_stats.online,
