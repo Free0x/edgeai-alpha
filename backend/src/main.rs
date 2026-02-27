@@ -27,11 +27,11 @@ use network::{NetworkManager, NodeType};
 use network::libp2p_network::{NetworkConfig, NetworkCommand, NetworkEvent, start_p2p_network};
 use api::{
     AppState, DeviceState, StakingState, ContractState, GovernanceState, DexState, IoTState,
-    BridgeState,
+    BridgeState, RewardsState, RewardsSystem,
     configure_routes, configure_wallet_routes, configure_data_routes, 
     configure_device_routes, configure_staking_routes, configure_contract_routes,
     configure_governance_routes, configure_dex_routes, configure_iot_routes,
-    configure_bridge_routes
+    configure_bridge_routes, configure_rewards_routes
 };
 use contracts::WasmRuntime;
 
@@ -225,6 +225,11 @@ async fn main() -> std::io::Result<()> {
     let bridge_state = web::Data::new(BridgeState::new(blockchain.clone()));
     info!("Bridge module initialized (semi-automatic, multi-chain ready)");
 
+    let rewards_state = web::Data::new(RewardsState {
+        system: Arc::new(RwLock::new(RewardsSystem::new())),
+    });
+    info!("Rewards distribution system initialized");
+
     // Start P2P event handler
     if let Some(mut event_rx) = p2p_event_rx {
         let p2p_blockchain = blockchain.clone();
@@ -382,6 +387,7 @@ async fn main() -> std::io::Result<()> {
     info!("Smart Contracts API at http://{}/api/contracts/", bind_address);
     info!("Governance API at http://{}/api/governance/", bind_address);
     info!("DEX API at http://{}/api/dex/", bind_address);
+    info!("Rewards API at http://{}/api/rewards/", bind_address);
     info!("Block Explorer available at http://{}/", bind_address);
     
     // Start HTTP server
@@ -398,6 +404,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(governance_state.clone())
             .app_data(dex_state.clone())
             .app_data(iot_state.clone())
+            .app_data(rewards_state.clone())
             .configure(configure_routes)
             .configure(configure_wallet_routes)
             .configure(configure_data_routes)
@@ -408,6 +415,7 @@ async fn main() -> std::io::Result<()> {
             .configure(|cfg| configure_dex_routes(cfg, dex_state.clone()))
             .configure(configure_iot_routes)
             .configure(|cfg| configure_bridge_routes(cfg, bridge_state.clone()))
+            .configure(configure_rewards_routes)
             .service(Files::new("/", "./static").index_file("index.html"))
     })
     .bind(bind_address)?
