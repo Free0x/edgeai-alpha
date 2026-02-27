@@ -386,24 +386,7 @@ async fn main() -> std::io::Result<()> {
     
     // Start HTTP server
     HttpServer::new(move || {
-        let cors = Cors::default()
-            .allowed_origin("https://edgeai-alpha.vercel.app")
-            .allowed_origin("https://frontend-flame-kappa-42.vercel.app")
-            .allowed_origin_fn(|origin, _req_head| {
-                origin.as_bytes().ends_with(b".vercel.app") || 
-                origin.as_bytes().ends_with(b".manus.space") ||
-                origin.as_bytes().ends_with(b".manus.computer") ||
-                origin.as_bytes().ends_with(b"edgeaiexplorer.org")
-            })
-            .allowed_origin("https://edgeai-chain.github.io")
-            .allowed_origin("http://localhost:3000")
-            .allowed_origin("http://localhost:5173")
-            .allowed_origin("http://127.0.0.1:3000")
-            .allowed_origin("http://127.0.0.1:5173")
-            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
-            .allowed_headers(vec![header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT])
-            .supports_credentials()
-            .max_age(3600);
+        let cors = Cors::permissive();
         
         App::new()
             .wrap(cors)
