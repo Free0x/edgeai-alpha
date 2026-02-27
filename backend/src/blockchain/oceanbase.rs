@@ -43,6 +43,36 @@ impl OceanBaseStorage {
         
         info!("OceanBase connection pool established");
         
+        // Auto-create bridge_requests table if it doesn't exist
+        let create_bridge_table = sqlx::query(
+            "CREATE TABLE IF NOT EXISTS bridge_requests (\
+                request_id VARCHAR(64) PRIMARY KEY, \
+                direction VARCHAR(20) NOT NULL, \
+                target_chain VARCHAR(20) NOT NULL DEFAULT 'bsc', \
+                edge_address VARCHAR(128) NOT NULL, \
+                evm_address VARCHAR(128) NOT NULL, \
+                amount BIGINT UNSIGNED NOT NULL, \
+                fee BIGINT UNSIGNED NOT NULL DEFAULT 0, \
+                status VARCHAR(20) NOT NULL DEFAULT 'pending', \
+                tx_hash_edge VARCHAR(128), \
+                tx_hash_evm VARCHAR(128), \
+                admin_note TEXT, \
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, \
+                completed_at DATETIME, \
+                INDEX idx_status (status), \
+                INDEX idx_edge_address (edge_address), \
+                INDEX idx_evm_address (evm_address), \
+                INDEX idx_created_at (created_at)\
+            ) DEFAULT CHARSET=utf8mb4"
+        )
+        .execute(&pool)
+        .await;
+        
+        match create_bridge_table {
+            Ok(_) => info!("bridge_requests table ensured"),
+            Err(e) => warn!("Failed to create bridge_requests table (may already exist): {}", e),
+        }
+        
         Ok(OceanBaseStorage { pool })
     }
     
