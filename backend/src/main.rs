@@ -390,7 +390,9 @@ async fn main() -> std::io::Result<()> {
             .allowed_origin("https://edgeai-alpha.vercel.app")
             .allowed_origin("https://frontend-flame-kappa-42.vercel.app")
             .allowed_origin_fn(|origin, _req_head| {
-                origin.as_bytes().ends_with(b".vercel.app")
+                origin.as_bytes().ends_with(b".vercel.app") || 
+                origin.as_bytes().ends_with(b".manus.space") ||
+                origin.as_bytes().ends_with(b"edgeaiexplorer.org")
             })
             .allowed_origin("https://edgeai-chain.github.io")
             .allowed_origin("http://localhost:3000")
