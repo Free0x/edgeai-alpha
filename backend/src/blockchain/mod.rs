@@ -8,6 +8,7 @@ pub mod transaction;
 pub mod chain;
 pub mod mempool;
 pub mod storage;
+pub mod oceanbase;
 
 // Core blockchain exports - only export what's actually used externally
 pub use block::Block;

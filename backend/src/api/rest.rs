@@ -387,8 +387,14 @@ pub async fn mine_block(
     let mut blockchain = data.blockchain.write().await;
     
     match blockchain.mine_block(body.validator.clone()) {
-        Ok(block) => {
-            info!("Block #{} mined by {}", block.index, &body.validator[..8.min(body.validator.len())]);
+        Ok((block, affected_accounts)) => {
+            info!("Block #{} mined by {} ({} accounts affected)", 
+                  block.index, &body.validator[..8.min(body.validator.len())], affected_accounts.len());
+            
+            // Async persist to OceanBase
+            blockchain.persist_block_async(&block).await;
+            blockchain.persist_accounts_async(&affected_accounts).await;
+            
             HttpResponse::Ok().json(ApiResponse::success(block))
         }
         Err(e) => HttpResponse::BadRequest().json(ApiResponse::<()>::error(&e)),

@@ -2,6 +2,11 @@
 //!
 //! This module contains the core blockchain logic including chain state,
 //! block management, and transaction processing.
+//!
+//! ## Storage Architecture (v0.7.0)
+//! - **Primary**: OceanBase Cloud (MySQL compatible) for persistent storage
+//! - **Fallback**: RocksDB + state.json for local storage when OceanBase is unavailable
+//! - **In-memory**: Only recent blocks kept in RAM for fast API queries
 
 #![allow(dead_code)]
 
@@ -17,6 +22,7 @@ use rayon::prelude::*;
 use crate::blockchain::block::Block;
 use crate::blockchain::transaction::{Transaction, TransactionType};
 use crate::blockchain::storage::Storage;
+use crate::blockchain::oceanbase::OceanBaseStorage;
 
 const DATA_DIR: &str = "/data";
 const BLOCKS_FILE: &str = "blocks.jsonl";  // JSON Lines format for append-only
@@ -79,7 +85,7 @@ pub struct ChainMetadata {
 }
 
 /// The main blockchain structure - optimized for memory efficiency
-/// Now uses RocksDB for persistent storage with file-based fallback
+/// Now uses OceanBase Cloud as primary storage with RocksDB fallback
 #[derive(Serialize, Deserialize)]
 pub struct Blockchain {
     /// Only keep recent blocks in memory for API queries
@@ -87,9 +93,12 @@ pub struct Blockchain {
     pub chain: Vec<Block>,
     #[serde(skip)]
     pub pending_transactions: Vec<Transaction>,
-    /// RocksDB storage backend (primary)
+    /// RocksDB storage backend (local fallback)
     #[serde(skip)]
     storage: Option<Storage>,
+    /// OceanBase cloud storage (primary)
+    #[serde(skip)]
+    ob_storage: Option<OceanBaseStorage>,
     pub state: ChainState,
     pub difficulty: u64,
     pub block_reward: u64,
@@ -102,8 +111,9 @@ pub struct Blockchain {
 
 impl Blockchain {
     /// Create a new blockchain with genesis block or load from disk
+    /// This is the synchronous entry point - OceanBase will be connected later via init_oceanbase()
     pub fn new() -> Self {
-        // Try to load from disk first
+        // Try to load from disk first (RocksDB or file)
         if let Some(chain) = Self::load_from_disk() {
             info!("Blockchain loaded from disk with {} total blocks ({} in memory)", 
                   chain.total_blocks, chain.chain.len());
@@ -171,6 +181,7 @@ impl Blockchain {
             chain: vec![genesis.clone()],
             pending_transactions: Vec::new(),
             storage,
+            ob_storage: None, // Will be initialized asynchronously
             state,
             difficulty: 2,
             block_reward: 100,
@@ -179,16 +190,123 @@ impl Blockchain {
             total_blocks: 1,
         };
 
-        // Save initial state to both RocksDB and file (for compatibility)
+        // Save initial state to RocksDB and file (for compatibility)
         chain.persist_block(&genesis);
         chain.persist_state();
         chain
     }
 
+    /// Initialize OceanBase connection asynchronously
+    /// Called after Blockchain::new() in the async main function
+    pub async fn init_oceanbase(&mut self) {
+        if let Some(url) = OceanBaseStorage::build_url() {
+            info!("Initializing OceanBase connection...");
+            match OceanBaseStorage::connect(&url).await {
+                Ok(ob) => {
+                    info!("OceanBase connected successfully!");
+                    
+                    // Try to load data from OceanBase if it has more data than local
+                    if let Some(ob_metadata) = ob.get_metadata().await {
+                        if ob_metadata.total_blocks > self.total_blocks {
+                            info!("OceanBase has more data ({} blocks vs {} local), loading from OceanBase...", 
+                                  ob_metadata.total_blocks, self.total_blocks);
+                            
+                            // Load accounts from OceanBase
+                            let accounts = ob.get_all_accounts().await;
+                            if !accounts.is_empty() {
+                                self.state.accounts = accounts;
+                                info!("Loaded {} accounts from OceanBase", self.state.accounts.len());
+                            }
+                            
+                            // Load recent blocks from OceanBase
+                            let recent_blocks = ob.get_recent_blocks(MAX_BLOCKS_IN_MEMORY).await;
+                            if !recent_blocks.is_empty() {
+                                self.chain = recent_blocks;
+                                info!("Loaded {} recent blocks from OceanBase", self.chain.len());
+                            }
+                            
+                            // Update metadata
+                            self.total_blocks = ob_metadata.total_blocks;
+                            self.difficulty = ob_metadata.difficulty;
+                            self.block_reward = ob_metadata.block_reward;
+                            self.data_reward_base = ob_metadata.data_reward_base;
+                            self.last_block_time = ob_metadata.last_block_time;
+                            
+                            // Load supply info
+                            self.state.total_supply = ob.get_total_supply().await;
+                            self.state.total_staked = ob.get_total_staked().await;
+                        } else if ob_metadata.total_blocks < self.total_blocks {
+                            info!("Local has more data ({} blocks vs {} OceanBase), will sync to OceanBase", 
+                                  self.total_blocks, ob_metadata.total_blocks);
+                            // Sync local data to OceanBase in background
+                            // For now, just save current state
+                            if let Err(e) = ob.put_accounts_batch(&self.state.accounts).await {
+                                warn!("Failed to sync accounts to OceanBase: {}", e);
+                            }
+                            let metadata = ChainMetadata {
+                                total_blocks: self.total_blocks,
+                                difficulty: self.difficulty,
+                                block_reward: self.block_reward,
+                                data_reward_base: self.data_reward_base,
+                                last_block_time: self.last_block_time,
+                            };
+                            if let Err(e) = ob.put_metadata(&metadata).await {
+                                warn!("Failed to sync metadata to OceanBase: {}", e);
+                            }
+                            if let Err(e) = ob.put_supply_info(self.state.total_supply, self.state.total_staked).await {
+                                warn!("Failed to sync supply info to OceanBase: {}", e);
+                            }
+                        } else {
+                            info!("OceanBase and local data are in sync ({} blocks)", self.total_blocks);
+                        }
+                    } else {
+                        info!("OceanBase is empty, syncing local data...");
+                        // Sync current state to OceanBase
+                        if let Err(e) = ob.put_accounts_batch(&self.state.accounts).await {
+                            warn!("Failed to sync accounts to OceanBase: {}", e);
+                        }
+                        let metadata = ChainMetadata {
+                            total_blocks: self.total_blocks,
+                            difficulty: self.difficulty,
+                            block_reward: self.block_reward,
+                            data_reward_base: self.data_reward_base,
+                            last_block_time: self.last_block_time,
+                        };
+                        if let Err(e) = ob.put_metadata(&metadata).await {
+                            warn!("Failed to sync metadata to OceanBase: {}", e);
+                        }
+                        if let Err(e) = ob.put_supply_info(self.state.total_supply, self.state.total_staked).await {
+                            warn!("Failed to sync supply info to OceanBase: {}", e);
+                        }
+                    }
+                    
+                    self.ob_storage = Some(ob);
+                    self.ensure_device_accounts();
+                    info!("OceanBase initialization complete");
+                }
+                Err(e) => {
+                    warn!("Failed to connect to OceanBase: {}. Using local storage only.", e);
+                }
+            }
+        } else {
+            info!("OceanBase not configured (OCEANBASE_HOST not set), using local storage only");
+        }
+    }
+    
+    /// Check if OceanBase is connected
+    pub fn has_oceanbase(&self) -> bool {
+        self.ob_storage.is_some()
+    }
+    
+    /// Get OceanBase storage reference (for direct queries from API handlers)
+    pub fn oceanbase(&self) -> Option<&OceanBaseStorage> {
+        self.ob_storage.as_ref()
+    }
+
     /// Load blockchain from disk - memory efficient version
     /// Priority: RocksDB > New file format > Legacy format
     fn load_from_disk() -> Option<Self> {
-        // Try RocksDB first (primary storage)
+        // Try RocksDB first (primary local storage)
         if let Some(chain) = Self::load_from_rocksdb() {
             info!("Loaded blockchain from RocksDB");
             return Some(chain);
@@ -230,8 +348,6 @@ impl Blockchain {
         }
         
         // Reconstruct state from RocksDB
-        // For now, we still keep state in memory for fast access
-        // Future optimization: lazy load accounts from RocksDB
         let total_supply = storage.get_total_supply();
         let total_staked = storage.get_total_staked();
         
@@ -241,8 +357,6 @@ impl Blockchain {
             if let Ok(data) = fs::read_to_string(&state_path) {
                 if let Ok((s, _)) = serde_json::from_str::<(ChainState, ChainMetadata)>(&data) {
                     info!("Loaded state with {} accounts, clearing data_registry to save memory", s.accounts.len());
-                    // Keep accounts but clear data_registry to save memory
-                    // data_registry can be rebuilt from blocks if needed
                     ChainState {
                         accounts: s.accounts,
                         data_registry: HashMap::new(),
@@ -278,6 +392,7 @@ impl Blockchain {
             chain: recent_blocks,
             pending_transactions: Vec::new(),
             storage: Some(storage),
+            ob_storage: None, // Will be initialized asynchronously via init_oceanbase()
             state,
             difficulty: metadata.difficulty,
             block_reward: metadata.block_reward,
@@ -304,7 +419,6 @@ impl Blockchain {
             Ok(s) => {
                 info!("Migrating {} blocks to RocksDB...", metadata.total_blocks);
                 
-                // Read all blocks from JSONL and write to RocksDB
                 if let Ok(file) = fs::File::open(&blocks_path) {
                     let reader = BufReader::new(file);
                     let mut migrated = 0u64;
@@ -322,17 +436,12 @@ impl Blockchain {
                     info!("Migrated {} blocks to RocksDB", migrated);
                 }
                 
-                // Save metadata to RocksDB
                 if let Err(e) = s.put_metadata(&metadata) {
                     warn!("Failed to save metadata to RocksDB: {}", e);
                 }
-                
-                // Save accounts to RocksDB
                 if let Err(e) = s.put_accounts_batch(&state.accounts) {
                     warn!("Failed to save accounts to RocksDB: {}", e);
                 }
-                
-                // Save supply info
                 if let Err(e) = s.put_supply_info(state.total_supply, state.total_staked) {
                     warn!("Failed to save supply info to RocksDB: {}", e);
                 }
@@ -345,13 +454,13 @@ impl Blockchain {
             }
         };
         
-        // Load only the last N blocks into memory
         let recent_blocks = Self::load_recent_blocks(&blocks_path, MAX_BLOCKS_IN_MEMORY)?;
         
         let mut chain = Blockchain {
             chain: recent_blocks,
             pending_transactions: Vec::new(),
             storage,
+            ob_storage: None,
             state,
             difficulty: metadata.difficulty,
             block_reward: metadata.block_reward,
@@ -360,9 +469,7 @@ impl Blockchain {
             total_blocks: metadata.total_blocks,
         };
         
-        // Ensure simulated device accounts exist
         chain.ensure_device_accounts();
-        
         Some(chain)
     }
     
@@ -371,7 +478,6 @@ impl Blockchain {
         let file = fs::File::open(path).ok()?;
         let reader = BufReader::new(file);
         
-        // Read all lines and keep only the last N
         let lines: Vec<String> = reader.lines().filter_map(|l| l.ok()).collect();
         let start = if lines.len() > count { lines.len() - count } else { 0 };
         
@@ -405,7 +511,6 @@ impl Blockchain {
         let legacy: LegacyBlockchain = serde_json::from_str(&data).ok()?;
         let total_blocks = legacy.chain.len() as u64;
         
-        // Write all blocks to new format
         let blocks_path = Path::new(DATA_DIR).join(BLOCKS_FILE);
         if let Ok(mut file) = OpenOptions::new()
             .create(true)
@@ -420,7 +525,6 @@ impl Blockchain {
             }
         }
         
-        // Keep only recent blocks in memory
         let recent_start = if legacy.chain.len() > MAX_BLOCKS_IN_MEMORY {
             legacy.chain.len() - MAX_BLOCKS_IN_MEMORY
         } else {
@@ -428,7 +532,6 @@ impl Blockchain {
         };
         let recent_blocks: Vec<Block> = legacy.chain[recent_start..].to_vec();
         
-        // Initialize RocksDB and migrate
         let storage = match Storage::open(DATA_DIR) {
             Ok(s) => {
                 info!("Migrating {} legacy blocks to RocksDB...", total_blocks);
@@ -461,6 +564,7 @@ impl Blockchain {
             chain: recent_blocks,
             pending_transactions: Vec::new(),
             storage,
+            ob_storage: None,
             state: legacy.state,
             difficulty: legacy.difficulty,
             block_reward: legacy.block_reward,
@@ -469,10 +573,7 @@ impl Blockchain {
             total_blocks,
         };
         
-        // Save state in new format
         chain.save_state_to_disk();
-        
-        // Remove legacy file
         let _ = fs::remove_file(&legacy_path);
         info!("Migration complete: {} blocks migrated to RocksDB", total_blocks);
         
@@ -576,9 +677,9 @@ impl Blockchain {
         self.persist_state();
     }
     
-    /// Persist a block to storage (RocksDB primary, file fallback)
+    /// Persist a block to storage (OceanBase primary, RocksDB + file fallback)
     fn persist_block(&self, block: &Block) {
-        // Write to RocksDB if available
+        // Write to RocksDB if available (local cache)
         if let Some(ref storage) = self.storage {
             if let Err(e) = storage.put_block(block) {
                 error!("Failed to write block to RocksDB: {}", e);
@@ -587,9 +688,27 @@ impl Blockchain {
         
         // Also write to file for compatibility during migration period
         self.append_block_to_disk(block);
+        
+        // Write to OceanBase asynchronously (fire-and-forget from sync context)
+        // OceanBase writes are handled in persist_block_async() called from mine_block()
     }
     
-    /// Persist state to storage (RocksDB primary, file fallback)
+    /// Persist a block and its transactions to OceanBase (async version)
+    pub async fn persist_block_async(&self, block: &Block) {
+        if let Some(ref ob) = self.ob_storage {
+            if let Err(e) = ob.put_block(block).await {
+                warn!("Failed to write block {} to OceanBase: {}", block.index, e);
+            }
+            // Also persist all transactions in this block
+            for tx in &block.transactions {
+                if let Err(e) = ob.put_transaction(tx, block.index).await {
+                    warn!("Failed to write tx {} to OceanBase: {}", &tx.id[..8.min(tx.id.len())], e);
+                }
+            }
+        }
+    }
+    
+    /// Persist state to storage (OceanBase primary, RocksDB + file fallback)
     fn persist_state(&self) {
         // Write to RocksDB if available
         if let Some(ref storage) = self.storage {
@@ -609,7 +728,6 @@ impl Blockchain {
                 error!("Failed to write supply info to RocksDB: {}", e);
             }
             
-            // Optionally flush to ensure durability
             if let Err(e) = storage.flush() {
                 warn!("Failed to flush RocksDB: {}", e);
             }
@@ -617,6 +735,40 @@ impl Blockchain {
         
         // Also write to file for compatibility
         self.save_state_to_disk();
+    }
+    
+    /// Persist state to OceanBase (async version)
+    pub async fn persist_state_async(&self) {
+        if let Some(ref ob) = self.ob_storage {
+            let metadata = ChainMetadata {
+                total_blocks: self.total_blocks,
+                difficulty: self.difficulty,
+                block_reward: self.block_reward,
+                data_reward_base: self.data_reward_base,
+                last_block_time: self.last_block_time,
+            };
+            
+            if let Err(e) = ob.put_metadata(&metadata).await {
+                warn!("Failed to write metadata to OceanBase: {}", e);
+            }
+            
+            if let Err(e) = ob.put_supply_info(self.state.total_supply, self.state.total_staked).await {
+                warn!("Failed to write supply info to OceanBase: {}", e);
+            }
+        }
+    }
+    
+    /// Persist changed accounts to OceanBase (async version)
+    pub async fn persist_accounts_async(&self, addresses: &[String]) {
+        if let Some(ref ob) = self.ob_storage {
+            for addr in addresses {
+                if let Some(account) = self.state.accounts.get(addr) {
+                    if let Err(e) = ob.put_account(account).await {
+                        warn!("Failed to write account {} to OceanBase: {}", addr, e);
+                    }
+                }
+            }
+        }
     }
     
     /// Prune old blocks from memory to prevent OOM
@@ -629,16 +781,14 @@ impl Blockchain {
     }
     
     /// Prune old blocks from disk to save space
-    /// Keeps only the last KEEP_FULL_BLOCKS blocks with full transaction data
     fn prune_disk_blocks(&self) {
-        const KEEP_FULL_BLOCKS: u64 = 5000; // Keep last 5k blocks with full data (reduced for disk space)
+        const KEEP_FULL_BLOCKS: u64 = 5000;
         
         if let Some(ref storage) = self.storage {
             match storage.prune_old_blocks(self.total_blocks, KEEP_FULL_BLOCKS) {
                 Ok(pruned) => {
                     if pruned > 0 {
                         info!("Pruned {} old blocks from disk", pruned);
-                        // Trigger compaction to reclaim space
                         if let Err(e) = storage.compact() {
                             warn!("Failed to compact RocksDB: {}", e);
                         }
@@ -658,33 +808,27 @@ impl Blockchain {
     
     /// Get block by index - may need to load from disk for old blocks
     pub fn get_block(&self, index: u64) -> Option<&Block> {
-        // Check if block is in memory
         if let Some(first_in_memory) = self.chain.first() {
             if index >= first_in_memory.index {
                 let offset = (index - first_in_memory.index) as usize;
                 return self.chain.get(offset);
             }
         }
-        // Block is not in memory - would need disk access
-        // For now, return None for old blocks
         None
     }
     
     /// Get block by index with disk fallback (RocksDB primary, file fallback)
     pub fn get_block_with_disk_fallback(&self, index: u64) -> Option<Block> {
-        // Check memory first (fastest)
         if let Some(block) = self.get_block(index) {
             return Some(block.clone());
         }
         
-        // Try RocksDB (O(1) lookup)
         if let Some(ref storage) = self.storage {
             if let Some(block) = storage.get_block(index) {
                 return Some(block);
             }
         }
         
-        // Fall back to file (O(n) scan - legacy compatibility)
         let blocks_path = Path::new(DATA_DIR).join(BLOCKS_FILE);
         if let Ok(file) = fs::File::open(&blocks_path) {
             let reader = BufReader::new(file);
@@ -699,13 +843,37 @@ impl Blockchain {
         None
     }
     
+    /// Get block by index with OceanBase fallback (async version)
+    pub async fn get_block_async(&self, index: u64) -> Option<Block> {
+        // Check memory first
+        if let Some(block) = self.get_block(index) {
+            return Some(block.clone());
+        }
+        
+        // Try OceanBase
+        if let Some(ref ob) = self.ob_storage {
+            if let Some(block) = ob.get_block(index).await {
+                return Some(block);
+            }
+        }
+        
+        // Fall back to RocksDB
+        if let Some(ref storage) = self.storage {
+            if let Some(block) = storage.get_block(index) {
+                return Some(block);
+            }
+        }
+        
+        None
+    }
+    
     /// Get block by hash
     pub fn get_block_by_hash(&self, hash: &str) -> Option<&Block> {
         self.chain.iter().find(|b| b.hash == hash)
     }
 
     /// Get transaction by hash (returns a clone to avoid lifetime issues)
-    /// Now supports RocksDB lookup for O(1) transaction retrieval
+    /// Now supports OceanBase lookup for historical transactions
     pub fn get_transaction(&self, hash: &str) -> Option<Transaction> {
         // Search in pending transactions first
         if let Some(tx) = self.pending_transactions.iter().find(|tx| tx.hash == hash) {
@@ -722,6 +890,23 @@ impl Blockchain {
         // Try RocksDB (O(1) lookup for historical transactions)
         if let Some(ref storage) = self.storage {
             if let Some(tx) = storage.get_transaction(hash) {
+                return Some(tx);
+            }
+        }
+        
+        None
+    }
+    
+    /// Get transaction by hash with OceanBase fallback (async version)
+    pub async fn get_transaction_async(&self, hash: &str) -> Option<Transaction> {
+        // Check sync sources first
+        if let Some(tx) = self.get_transaction(hash) {
+            return Some(tx);
+        }
+        
+        // Try OceanBase
+        if let Some(ref ob) = self.ob_storage {
+            if let Some(tx) = ob.get_transaction(hash).await {
                 return Some(tx);
             }
         }
@@ -768,7 +953,6 @@ impl Blockchain {
         // Memory optimization: limit pending transactions to prevent OOM
         const MAX_PENDING_TX: usize = 500;
         if self.pending_transactions.len() >= MAX_PENDING_TX {
-            // Remove oldest transactions when limit reached
             self.pending_transactions.drain(0..100);
             warn!("Pending pool overflow, removed 100 oldest transactions");
         }
@@ -781,12 +965,10 @@ impl Blockchain {
     
     /// Validate a single transaction (pure function for parallel processing)
     fn validate_transaction_pure(&self, tx: &Transaction) -> Result<(), String> {
-        // Validate transaction hash
         if !tx.verify_hash() {
             return Err(format!("Invalid transaction hash: {}", &tx.hash[..8.min(tx.hash.len())]));
         }
         
-        // Apply validation rules based on transaction type
         match tx.tx_type {
             TransactionType::Transfer => {
                 let sender_balance = self.get_balance(&tx.sender);
@@ -801,7 +983,6 @@ impl Blockchain {
                     return Err("Insufficient balance".to_string());
                 }
             },
-            // DataContribution, ContractDeploy, ContractCall, etc. - no balance check needed
             _ => {}
         }
         
@@ -809,7 +990,6 @@ impl Blockchain {
     }
     
     /// Add multiple transactions in parallel (high-performance batch processing)
-    /// Returns (successful_count, failed_count, successful_hashes)
     pub fn add_transactions_batch(&mut self, txs: Vec<Transaction>) -> (usize, usize, Vec<String>) {
         let batch_size = txs.len();
         
@@ -817,7 +997,6 @@ impl Blockchain {
             return (0, 0, Vec::new());
         }
         
-        // Phase 1: Parallel validation (CPU-intensive hash verification)
         let validation_results: Vec<(Transaction, Result<(), String>)> = txs
             .into_par_iter()
             .map(|tx| {
@@ -826,7 +1005,6 @@ impl Blockchain {
             })
             .collect();
         
-        // Phase 2: Sequential insertion (requires mutable access to pending_transactions)
         let mut successful_count = 0;
         let mut failed_count = 0;
         let mut successful_hashes = Vec::new();
@@ -852,16 +1030,15 @@ impl Blockchain {
     }
     
     /// Mine a new block with pending transactions
-    pub fn mine_block(&mut self, validator: String) -> Result<Block, String> {
+    /// Returns the block and a list of affected account addresses (for async OceanBase sync)
+    pub fn mine_block(&mut self, validator: String) -> Result<(Block, Vec<String>), String> {
         let previous_hash = self.latest_block().hash.clone();
-        let index = self.total_blocks;  // Use total_blocks instead of chain.len()
+        let index = self.total_blocks;
         
-        // Select transactions for the block (max 150 for Phase 1)
         let transactions: Vec<Transaction> = self.pending_transactions
             .drain(..self.pending_transactions.len().min(150))
             .collect();
         
-        // Create block reward transaction
         let reward_tx = Transaction::reward(
             validator.clone(),
             self.block_reward,
@@ -871,7 +1048,6 @@ impl Blockchain {
         let mut block_txs = vec![reward_tx];
         block_txs.extend(transactions);
         
-        // Calculate PoIE adjusted difficulty
         let data_entropy = Block::calculate_data_entropy(&block_txs);
         let entropy_bonus = (data_entropy * 0.5) as u64; 
         let base_difficulty = 2;
@@ -885,7 +1061,6 @@ impl Blockchain {
         info!("Mining block {} with PoIE difficulty: {} (Base: {}, Entropy Bonus: {})", 
             index, adjusted_difficulty, base_difficulty, entropy_bonus);
 
-        // Create and mine the block
         let mut block = Block::new(
             index,
             previous_hash,
@@ -898,6 +1073,18 @@ impl Blockchain {
         
         self.last_block_time = Utc::now().timestamp();
         
+        // Track affected accounts for OceanBase sync
+        let mut affected_accounts: Vec<String> = Vec::new();
+        affected_accounts.push(validator.clone());
+        for tx in &block.transactions {
+            affected_accounts.push(tx.sender.clone());
+            for output in &tx.outputs {
+                affected_accounts.push(output.recipient.clone());
+            }
+        }
+        affected_accounts.sort();
+        affected_accounts.dedup();
+        
         // Apply block to state
         self.apply_block(&block)?;
         
@@ -908,7 +1095,7 @@ impl Blockchain {
         info!("Block {} mined by {} ({} blocks in memory)", 
               index, &validator[..8.min(validator.len())], self.chain.len());
         
-        // Persist block to RocksDB and file (dual-write for migration period)
+        // Persist block to RocksDB and file (sync)
         self.persist_block(&block);
         
         // Save state periodically (every 10 blocks to reduce I/O)
@@ -919,12 +1106,12 @@ impl Blockchain {
         // Prune old blocks from memory to prevent OOM
         self.prune_memory();
         
-        // Prune old blocks from disk every 500 blocks to save space
+        // Prune old blocks from disk every 500 blocks
         if self.total_blocks % 500 == 0 {
             self.prune_disk_blocks();
         }
         
-        Ok(block)
+        Ok((block, affected_accounts))
     }
     
     /// Apply block transactions to state
@@ -966,7 +1153,6 @@ impl Blockchain {
     
     /// Transfer tokens between accounts
     fn transfer(&mut self, from: &str, to: &str, amount: u64) -> Result<(), String> {
-        // Get or create sender account
         let sender = self.state.accounts.entry(from.to_string())
             .or_insert_with(|| Account::new(from.to_string()));
         
@@ -976,7 +1162,6 @@ impl Blockchain {
         sender.balance -= amount;
         sender.nonce += 1;
         
-        // Get or create recipient account
         let recipient = self.state.accounts.entry(to.to_string())
             .or_insert_with(|| Account::new(to.to_string()));
         recipient.balance += amount;
@@ -989,7 +1174,6 @@ impl Blockchain {
         let device = &tx.sender;
         let reward = tx.outputs.get(0).map(|o| o.amount).unwrap_or(0);
         
-        // Get or create device account
         let account = self.state.accounts.entry(device.to_string())
             .or_insert_with(|| Account::new(device.to_string()));
         
@@ -997,7 +1181,6 @@ impl Blockchain {
         account.data_contributions += 1;
         account.reputation_score = (account.reputation_score + 0.1).min(100.0);
         
-        // Register data if hash provided
         if let Some(output) = tx.outputs.get(0) {
             if let Some(data_hash) = &output.data_hash {
                 let quality = tx.data_quality.as_ref()
@@ -1037,7 +1220,6 @@ impl Blockchain {
         let buyer = &tx.sender;
         let amount = tx.total_output();
         
-        // Deduct from buyer
         let buyer_account = self.state.accounts.get_mut(buyer)
             .ok_or("Buyer account not found")?;
         
@@ -1046,13 +1228,11 @@ impl Blockchain {
         }
         buyer_account.balance -= amount;
         
-        // Pay seller
         for output in &tx.outputs {
             let seller_account = self.state.accounts.entry(output.recipient.clone())
                 .or_insert_with(|| Account::new(output.recipient.clone()));
             seller_account.balance += output.amount;
             
-            // Update data entry if exists
             if let Some(data_hash) = &output.data_hash {
                 if let Some(entry) = self.state.data_registry.get_mut(data_hash) {
                     entry.purchases += 1;
@@ -1137,7 +1317,6 @@ impl Blockchain {
         let height = self.total_blocks;
         let total_transactions: u64 = self.chain.iter().map(|b| b.transactions.len() as u64).sum();
         
-        // Estimate total transactions based on average
         let avg_tx_per_block = if !self.chain.is_empty() {
             total_transactions as f64 / self.chain.len() as f64
         } else {
@@ -1145,26 +1324,22 @@ impl Blockchain {
         };
         let estimated_total_tx = (avg_tx_per_block * height as f64) as u64;
         
-        // Calculate network entropy from in-memory blocks
         let network_entropy: f64 = self.chain.iter()
             .map(|b| b.header.data_entropy)
             .sum();
         
-        // Calculate data throughput
         let data_throughput = if height > 0 {
             (estimated_total_tx as f64 * 256.0) / (height as f64 * 10.0)
         } else {
             0.0
         };
         
-        // Calculate TPS
         let tps = if height > 0 {
             estimated_total_tx as f64 / (height as f64 * 10.0)
         } else {
             0.0
         };
         
-        // Calculate validator power index
         let validator_power = {
             let active = self.state.accounts.len() as f64;
             let data = self.state.data_registry.len() as f64;

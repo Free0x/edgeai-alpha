@@ -41,6 +41,9 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 # Database (simple file-based)
 rocksdb = "0.22"
 
+# OceanBase/MySQL database (cloud storage)
+sqlx = { version = "0.7", features = ["runtime-tokio", "mysql", "chrono"] }
+
 # Math for entropy calculation
 statrs = "0.17"
 

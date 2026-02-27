@@ -10,6 +10,8 @@ primary_region = "sin"  # Singapore - closest to Asia
 [env]
   RUST_LOG = "info"
   PORT = "8080"
+  # OceanBase connection is configured via fly secrets:
+  # fly secrets set OCEANBASE_HOST=xxx OCEANBASE_PORT=3306 OCEANBASE_USER=xxx OCEANBASE_PASSWORD=xxx OCEANBASE_DATABASE=xxx
 
 [http_service]
   internal_port = 8080
@@ -24,9 +26,9 @@ primary_region = "sin"  # Singapore - closest to Asia
     soft_limit = 80
 
 [[vm]]
-  cpu_kind = "performance"
+  cpu_kind = "shared"
   cpus = 1
-  memory_mb = 4096  # 4GB for blockchain operations
+  memory_mb = 2048  # Reduced from 4096MB: OceanBase handles persistence, RocksDB memory optimized
 
 [checks]
   [checks.health]

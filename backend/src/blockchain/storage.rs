@@ -52,17 +52,19 @@ impl Storage {
         opts.create_if_missing(true);
         opts.create_missing_column_families(true);
         
-        // Memory optimization: reduce cache sizes significantly
-        opts.set_max_open_files(64);  // Reduced from 256
-        opts.set_write_buffer_size(8 * 1024 * 1024); // 8MB write buffer (reduced from 32MB)
+        // Memory optimization: minimize RocksDB memory footprint
+        // OceanBase is now the primary storage, RocksDB is just a local fallback
+        opts.set_max_open_files(32);  // Minimal open files
+        opts.set_write_buffer_size(2 * 1024 * 1024); // 2MB write buffer (minimal)
         opts.set_max_write_buffer_number(2);
-        opts.set_target_file_size_base(16 * 1024 * 1024); // 16MB SST files (reduced from 32MB)
-        opts.set_level_zero_file_num_compaction_trigger(2); // More aggressive compaction
+        opts.set_target_file_size_base(8 * 1024 * 1024); // 8MB SST files
+        opts.set_level_zero_file_num_compaction_trigger(2);
+        opts.set_db_write_buffer_size(4 * 1024 * 1024); // 4MB total write buffer limit
         
-        // Disable block cache to save memory (use OS page cache instead)
+        // Minimal block cache - OceanBase handles most reads now
         let mut block_opts = rocksdb::BlockBasedOptions::default();
-        block_opts.set_block_cache(&rocksdb::Cache::new_lru_cache(8 * 1024 * 1024)); // 8MB block cache (minimal)
-        block_opts.set_cache_index_and_filter_blocks(false); // Don't cache index/filter
+        block_opts.set_block_cache(&rocksdb::Cache::new_lru_cache(2 * 1024 * 1024)); // 2MB block cache
+        block_opts.set_cache_index_and_filter_blocks(false);
         opts.set_block_based_table_factory(&block_opts);
         
         // Compression settings
@@ -79,8 +81,10 @@ impl Storage {
         opts.set_level_compaction_dynamic_level_bytes(true);
         
         // Additional memory optimizations
-        opts.set_optimize_filters_for_hits(true);  // Optimize bloom filters
-        opts.set_max_background_jobs(2);  // Limit background threads
+        opts.set_optimize_filters_for_hits(true);
+        opts.set_max_background_jobs(1);  // Minimal background threads
+        opts.set_keep_log_file_num(2);  // Keep fewer log files
+        opts.set_max_total_wal_size(4 * 1024 * 1024); // 4MB WAL limit
         
         // Define column families
         let cf_names = vec![

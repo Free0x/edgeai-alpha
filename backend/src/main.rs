@@ -43,9 +43,9 @@ async fn main() -> std::io::Result<()> {
         .init();
     
     info!("============================================");
-    info!("   EdgeAI Blockchain Node v0.6.0");
+    info!("   EdgeAI Blockchain Node v0.7.0");
     info!("   The Most Intelligent Data Chain");
-    info!("   PoIE 2.0 + Staking + Contracts + DAO!");
+    info!("   PoIE 2.0 + OceanBase Cloud Storage!");
     info!("============================================");
     
     // Ensure data directory exists
@@ -56,8 +56,13 @@ async fn main() -> std::io::Result<()> {
         info!("Data directory found at {}", DATA_DIR);
     }
 
-    // Initialize blockchain (will load from disk if available)
-    let blockchain = Arc::new(RwLock::new(Blockchain::new()));
+    // Initialize blockchain (will load from local disk first)
+    let mut chain_instance = Blockchain::new();
+    
+    // Initialize OceanBase connection asynchronously
+    chain_instance.init_oceanbase().await;
+    
+    let blockchain = Arc::new(RwLock::new(chain_instance));
     
     // Initialize consensus
     let consensus = Arc::new(RwLock::new(PoIEConsensus::new()));
@@ -147,7 +152,6 @@ async fn main() -> std::io::Result<()> {
     info!("Network manager initialized (Node ID: {})", &node_id);
     
     // Initialize libp2p P2P network
-    // Read configuration from environment variables
     let p2p_port: u16 = std::env::var("EDGEAI_P2P_PORT")
         .unwrap_or_else(|_| "9000".to_string())
         .parse()
@@ -183,7 +187,6 @@ async fn main() -> std::io::Result<()> {
         }
     };
     
-    // Store P2P command sender for broadcasting
     let p2p_tx = Arc::new(tokio::sync::RwLock::new(p2p_command_tx));
     
     // Create app state
@@ -194,29 +197,23 @@ async fn main() -> std::io::Result<()> {
         network: network.clone(),
     });
     
-    // Create device state (separate for modularity)
     let device_state = web::Data::new(DeviceState {
         registry: device_registry.clone(),
     });
     
-    // Create staking state
     let staking_state = web::Data::new(StakingState {
         manager: staking_manager.clone(),
     });
     
-    // Create contract state
     let contract_state = web::Data::new(ContractState {
         runtime: wasm_runtime.clone(),
     });
     
-    // Create governance state
     let governance_state: web::Data<GovernanceState> = web::Data::new(governance_manager.clone());
 
-    // Create DEX state
     let dex_state = web::Data::new(DexState::new());
     info!("DEX initialized with default trading pairs");
 
-    // Create IoT state
     let iot_state = web::Data::new(IoTState {
         registry: Arc::new(RwLock::new(api::iot::IoTRegistry::new())),
     });
@@ -249,12 +246,10 @@ async fn main() -> std::io::Result<()> {
                     }
                     NetworkEvent::NewContribution(contrib) => {
                         info!("P2P: Received contribution from {}", &contrib.device_id[..8]);
-                        // Record contribution in device registry
                         let mut registry = p2p_device_registry.write().await;
                         if let Some(device) = registry.get_device_mut(&contrib.device_id) {
-                            // Calculate quality score from contribution
-                            let quality_score = 0.7; // Default quality, should be calculated
-                            let points = 10.0; // Base points
+                            let quality_score = 0.7;
+                            let points = 10.0;
                             device.record_contribution(quality_score, points);
                         }
                     }
@@ -266,7 +261,7 @@ async fn main() -> std::io::Result<()> {
         });
     }
     
-    // Start background mining task
+    // Start background mining task with OceanBase async persistence
     let mining_blockchain = blockchain.clone();
     let mining_validator = node_id.clone();
     let mining_p2p_tx = p2p_tx.clone();
@@ -275,7 +270,7 @@ async fn main() -> std::io::Result<()> {
     let mining_governance = governance_manager.clone();
     
     tokio::spawn(async move {
-        info!("Block producer started");
+        info!("Block producer started (with OceanBase async sync)");
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
         
         loop {
@@ -287,19 +282,17 @@ async fn main() -> std::io::Result<()> {
             // Update device activity status every 100 blocks
             if current_height % 100 == 0 {
                 let mut registry = mining_device_registry.write().await;
-                registry.update_activity_status(24); // 24 hours inactive threshold
+                registry.update_activity_status(24);
                 let stats = registry.get_stats();
                 info!("Device Registry: {} total, {} active, {} regions", 
                     stats.total_devices, stats.active_devices, stats.regions_covered);
                 
-                // Process unbonding queue
                 let mut staking = mining_staking.write().await;
                 let completed = staking.process_unbonding();
                 if !completed.is_empty() {
                     info!("Processed {} unbonding entries", completed.len());
                 }
                 
-                // Process expired governance deposits
                 let mut governance = mining_governance.write().await;
                 governance.process_expired_deposits();
             }
@@ -307,19 +300,16 @@ async fn main() -> std::io::Result<()> {
             // Distribute staking rewards every block
             {
                 let mut staking = mining_staking.write().await;
-                let block_reward = 100; // Base block reward
+                let block_reward = 100;
                 staking.distribute_rewards(block_reward);
             }
             
             // Collect pending transactions from mempool
             let mut mempool = MempoolManager::with_block_context(current_height);
-            // Phase 1: Generate 100-150 transactions per block for 1000 device network
-            // Target: 10-15 TPS with 10-second block interval
             let batch_size = 100 + (current_height % 51) as usize;
             let pending_txs = mempool.collect_pending(batch_size);
             info!("Generated {} transactions from mempool for block {}", pending_txs.len(), current_height);
             
-            // Add collected transactions to chain
             let mut added_count = 0;
             let mut failed_count = 0;
             for tx in pending_txs {
@@ -337,9 +327,20 @@ async fn main() -> std::io::Result<()> {
             
             // Produce new block
             match chain.mine_block(mining_validator.clone()) {
-                Ok(block) => {
+                Ok((block, affected_accounts)) => {
                     info!("Produced block #{} with {} transactions", 
                           block.index, block.transactions.len());
+                    
+                    // Async persist to OceanBase (non-blocking)
+                    chain.persist_block_async(&block).await;
+                    
+                    // Sync affected accounts to OceanBase every block
+                    chain.persist_accounts_async(&affected_accounts).await;
+                    
+                    // Sync metadata to OceanBase every 10 blocks
+                    if block.index % 10 == 0 {
+                        chain.persist_state_async().await;
+                    }
                     
                     // Broadcast block to P2P network
                     let p2p_guard = mining_p2p_tx.read().await;
@@ -366,7 +367,6 @@ async fn main() -> std::io::Result<()> {
     
     // Start HTTP server
     HttpServer::new(move || {
-        // CORS configuration - restrict to known origins for security
         let cors = Cors::default()
             .allowed_origin("https://edgeai-alpha.vercel.app")
             .allowed_origin("https://frontend-flame-kappa-42.vercel.app")
