@@ -12,9 +12,8 @@ pub mod smart_contract;
 pub mod wasm_runtime;
 
 // Re-export commonly used types
-pub use smart_contract::{SmartContract, ContractType, ContractState};
+pub use smart_contract::{ContractState, ContractType, SmartContract};
 pub use wasm_runtime::{
-    WasmRuntime, WasmError, ExecutionContext, ExecutionResult,
-    ContractAbi, AbiFunction, AbiParam, AbiEvent, ContractInfo,
-    GasMeter, GasCosts,
+    AbiEvent, AbiFunction, AbiParam, ContractAbi, ContractInfo, ExecutionContext, ExecutionResult,
+    GasCosts, GasMeter, WasmError, WasmRuntime,
 };

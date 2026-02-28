@@ -4,14 +4,14 @@
 //! transactions, chain state management, mempool, and persistent storage.
 
 pub mod block;
-pub mod transaction;
 pub mod chain;
 pub mod mempool;
-pub mod storage;
 pub mod oceanbase;
+pub mod storage;
+pub mod transaction;
 
 // Core blockchain exports - only export what's actually used externally
 pub use block::Block;
-pub use transaction::{Transaction, TransactionType};
 pub use chain::Blockchain;
 pub use mempool::MempoolManager;
+pub use transaction::{Transaction, TransactionType};

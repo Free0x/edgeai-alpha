@@ -8,11 +8,11 @@
 
 #![allow(dead_code)]
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use chrono::{DateTime, Utc};
 use log::info;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 
 /// Smart contract types for EdgeAI
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -43,19 +43,19 @@ impl ContractState {
             balances: HashMap::new(),
         }
     }
-    
+
     pub fn get(&self, key: &str) -> Option<&String> {
         self.storage.get(key)
     }
-    
+
     pub fn set(&mut self, key: String, value: String) {
         self.storage.insert(key, value);
     }
-    
+
     pub fn get_balance(&self, address: &str) -> u64 {
         *self.balances.get(address).unwrap_or(&0)
     }
-    
+
     pub fn set_balance(&mut self, address: String, amount: u64) {
         self.balances.insert(address, amount);
     }
@@ -81,11 +81,11 @@ impl SmartContract {
         hasher.update(owner.as_bytes());
         hasher.update(Utc::now().to_string().as_bytes());
         let address = hex::encode(hasher.finalize());
-        
+
         let mut code_hasher = Sha256::new();
         code_hasher.update(code.as_bytes());
         let code_hash = hex::encode(code_hasher.finalize());
-        
+
         SmartContract {
             address,
             contract_type,
@@ -151,11 +151,16 @@ impl DataMarketplaceContract {
             "listed_at": Utc::now().to_rfc3339(),
             "active": true
         });
-        
+
         contract.state.set(key, listing.to_string());
-        
-        info!("Data listed: {} by {} at price {}", &data_hash[..8], &ctx.caller[..8], price);
-        
+
+        info!(
+            "Data listed: {} by {} at price {}",
+            &data_hash[..8],
+            &ctx.caller[..8],
+            price
+        );
+
         ExecutionResult {
             success: true,
             return_value: Some(data_hash.clone()),
@@ -165,13 +170,15 @@ impl DataMarketplaceContract {
                 data: [
                     ("data_hash".to_string(), data_hash),
                     ("price".to_string(), price.to_string()),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 timestamp: Utc::now(),
             }],
             error: None,
         }
     }
-    
+
     /// Purchase data
     pub fn purchase_data(
         contract: &mut SmartContract,
@@ -179,22 +186,24 @@ impl DataMarketplaceContract {
         data_hash: String,
     ) -> ExecutionResult {
         let key = format!("listing:{}", data_hash);
-        
+
         let listing_str = match contract.state.get(&key) {
             Some(s) => s.clone(),
-            None => return ExecutionResult {
-                success: false,
-                return_value: None,
-                gas_used: 10000,
-                logs: vec![],
-                error: Some("Listing not found".to_string()),
-            },
+            None => {
+                return ExecutionResult {
+                    success: false,
+                    return_value: None,
+                    gas_used: 10000,
+                    logs: vec![],
+                    error: Some("Listing not found".to_string()),
+                }
+            }
         };
-        
+
         let listing: serde_json::Value = serde_json::from_str(&listing_str).unwrap();
         let price = listing["price"].as_u64().unwrap();
         let seller = listing["seller"].as_str().unwrap().to_string();
-        
+
         if ctx.value < price {
             return ExecutionResult {
                 success: false,
@@ -204,7 +213,7 @@ impl DataMarketplaceContract {
                 error: Some("Insufficient payment".to_string()),
             };
         }
-        
+
         // Record purchase
         let purchase_key = format!("purchase:{}:{}", data_hash, ctx.caller);
         let purchase = serde_json::json!({
@@ -213,16 +222,23 @@ impl DataMarketplaceContract {
             "price": price,
             "purchased_at": Utc::now().to_rfc3339()
         });
-        
+
         contract.state.set(purchase_key, purchase.to_string());
-        
+
         // Update seller balance
         let seller_balance = contract.state.get_balance(&seller);
         let seller_clone = seller.clone();
-        contract.state.set_balance(seller_clone, seller_balance + price);
-        
-        info!("Data purchased: {} by {} from {}", &data_hash[..8], &ctx.caller[..8], &seller[..8]);
-        
+        contract
+            .state
+            .set_balance(seller_clone, seller_balance + price);
+
+        info!(
+            "Data purchased: {} by {} from {}",
+            &data_hash[..8],
+            &ctx.caller[..8],
+            &seller[..8]
+        );
+
         ExecutionResult {
             success: true,
             return_value: Some(data_hash.clone()),
@@ -234,17 +250,21 @@ impl DataMarketplaceContract {
                     ("buyer".to_string(), ctx.caller.clone()),
                     ("seller".to_string(), seller),
                     ("price".to_string(), price.to_string()),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 timestamp: Utc::now(),
             }],
             error: None,
         }
     }
-    
+
     /// Get listing info
     pub fn get_listing(contract: &SmartContract, data_hash: &str) -> Option<serde_json::Value> {
         let key = format!("listing:{}", data_hash);
-        contract.state.get(&key)
+        contract
+            .state
+            .get(&key)
             .and_then(|s| serde_json::from_str(s).ok())
     }
 }
@@ -272,9 +292,9 @@ impl FederatedLearningContract {
             "status": "open",
             "created_at": Utc::now().to_rfc3339()
         });
-        
+
         contract.state.set(key, task.to_string());
-        
+
         ExecutionResult {
             success: true,
             return_value: Some(task_id.clone()),
@@ -285,13 +305,15 @@ impl FederatedLearningContract {
                     ("task_id".to_string(), task_id),
                     ("model_type".to_string(), model_type),
                     ("reward_pool".to_string(), reward_pool.to_string()),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 timestamp: Utc::now(),
             }],
             error: None,
         }
     }
-    
+
     /// Join a federated learning task
     pub fn join_task(
         contract: &mut SmartContract,
@@ -299,20 +321,22 @@ impl FederatedLearningContract {
         task_id: String,
     ) -> ExecutionResult {
         let key = format!("task:{}", task_id);
-        
+
         let task_str = match contract.state.get(&key) {
             Some(s) => s.clone(),
-            None => return ExecutionResult {
-                success: false,
-                return_value: None,
-                gas_used: 10000,
-                logs: vec![],
-                error: Some("Task not found".to_string()),
-            },
+            None => {
+                return ExecutionResult {
+                    success: false,
+                    return_value: None,
+                    gas_used: 10000,
+                    logs: vec![],
+                    error: Some("Task not found".to_string()),
+                }
+            }
         };
-        
+
         let mut task: serde_json::Value = serde_json::from_str(&task_str).unwrap();
-        
+
         if task["status"] != "open" {
             return ExecutionResult {
                 success: false,
@@ -322,14 +346,14 @@ impl FederatedLearningContract {
                 error: Some("Task is not open".to_string()),
             };
         }
-        
+
         // Add participant
         if let Some(participants) = task["participants"].as_array_mut() {
             participants.push(serde_json::json!(ctx.caller));
         }
-        
+
         contract.state.set(key, task.to_string());
-        
+
         ExecutionResult {
             success: true,
             return_value: Some(task_id.clone()),
@@ -339,13 +363,15 @@ impl FederatedLearningContract {
                 data: [
                     ("task_id".to_string(), task_id),
                     ("participant".to_string(), ctx.caller.clone()),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 timestamp: Utc::now(),
             }],
             error: None,
         }
     }
-    
+
     /// Submit model update
     pub fn submit_update(
         contract: &mut SmartContract,
@@ -361,9 +387,9 @@ impl FederatedLearningContract {
             "metrics": metrics,
             "submitted_at": Utc::now().to_rfc3339()
         });
-        
+
         contract.state.set(update_key, update.to_string());
-        
+
         ExecutionResult {
             success: true,
             return_value: Some(update_hash.clone()),
@@ -374,7 +400,9 @@ impl FederatedLearningContract {
                     ("task_id".to_string(), task_id),
                     ("participant".to_string(), ctx.caller.clone()),
                     ("update_hash".to_string(), update_hash),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 timestamp: Utc::now(),
             }],
             error: None,
@@ -403,9 +431,9 @@ impl DeviceRegistryContract {
             "is_active": true,
             "data_contributions": 0
         });
-        
+
         contract.state.set(key, device.to_string());
-        
+
         ExecutionResult {
             success: true,
             return_value: Some(device_id.clone()),
@@ -416,13 +444,15 @@ impl DeviceRegistryContract {
                     ("device_id".to_string(), device_id),
                     ("owner".to_string(), ctx.caller.clone()),
                     ("device_type".to_string(), device_type),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 timestamp: Utc::now(),
             }],
             error: None,
         }
     }
-    
+
     /// Update device status
     pub fn update_device_status(
         contract: &mut SmartContract,
@@ -431,20 +461,22 @@ impl DeviceRegistryContract {
         is_active: bool,
     ) -> ExecutionResult {
         let key = format!("device:{}", device_id);
-        
+
         let device_str = match contract.state.get(&key) {
             Some(s) => s.clone(),
-            None => return ExecutionResult {
-                success: false,
-                return_value: None,
-                gas_used: 10000,
-                logs: vec![],
-                error: Some("Device not found".to_string()),
-            },
+            None => {
+                return ExecutionResult {
+                    success: false,
+                    return_value: None,
+                    gas_used: 10000,
+                    logs: vec![],
+                    error: Some("Device not found".to_string()),
+                }
+            }
         };
-        
+
         let mut device: serde_json::Value = serde_json::from_str(&device_str).unwrap();
-        
+
         // Check ownership
         if device["owner"].as_str() != Some(ctx.caller.as_str()) {
             return ExecutionResult {
@@ -455,10 +487,10 @@ impl DeviceRegistryContract {
                 error: Some("Not device owner".to_string()),
             };
         }
-        
+
         device["is_active"] = serde_json::json!(is_active);
         contract.state.set(key, device.to_string());
-        
+
         ExecutionResult {
             success: true,
             return_value: Some(device_id.clone()),
@@ -468,13 +500,15 @@ impl DeviceRegistryContract {
                 data: [
                     ("device_id".to_string(), device_id),
                     ("is_active".to_string(), is_active.to_string()),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 timestamp: Utc::now(),
             }],
             error: None,
         }
     }
-    
+
     /// Record data contribution from device
     pub fn record_contribution(
         contract: &mut SmartContract,
@@ -483,25 +517,27 @@ impl DeviceRegistryContract {
         data_hash: String,
     ) -> ExecutionResult {
         let key = format!("device:{}", device_id);
-        
+
         let device_str = match contract.state.get(&key) {
             Some(s) => s.clone(),
-            None => return ExecutionResult {
-                success: false,
-                return_value: None,
-                gas_used: 10000,
-                logs: vec![],
-                error: Some("Device not found".to_string()),
-            },
+            None => {
+                return ExecutionResult {
+                    success: false,
+                    return_value: None,
+                    gas_used: 10000,
+                    logs: vec![],
+                    error: Some("Device not found".to_string()),
+                }
+            }
         };
-        
+
         let mut device: serde_json::Value = serde_json::from_str(&device_str).unwrap();
-        
+
         let contributions = device["data_contributions"].as_u64().unwrap_or(0) + 1;
         device["data_contributions"] = serde_json::json!(contributions);
-        
+
         contract.state.set(key, device.to_string());
-        
+
         ExecutionResult {
             success: true,
             return_value: Some(data_hash.clone()),
@@ -512,7 +548,9 @@ impl DeviceRegistryContract {
                     ("device_id".to_string(), device_id),
                     ("data_hash".to_string(), data_hash),
                     ("total_contributions".to_string(), contributions.to_string()),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 timestamp: Utc::now(),
             }],
             error: None,
@@ -531,27 +569,31 @@ impl ContractManager {
             contracts: HashMap::new(),
         }
     }
-    
+
     /// Deploy a new contract
     pub fn deploy(&mut self, contract_type: ContractType, owner: String) -> String {
         let contract = SmartContract::new(contract_type.clone(), owner.clone(), "");
         let address = contract.address.clone();
         self.contracts.insert(address.clone(), contract);
-        
-        info!("Contract deployed: {:?} at {}", contract_type, &address[..16]);
+
+        info!(
+            "Contract deployed: {:?} at {}",
+            contract_type,
+            &address[..16]
+        );
         address
     }
-    
+
     /// Get contract by address
     pub fn get_contract(&self, address: &str) -> Option<&SmartContract> {
         self.contracts.get(address)
     }
-    
+
     /// Get mutable contract
     pub fn get_contract_mut(&mut self, address: &str) -> Option<&mut SmartContract> {
         self.contracts.get_mut(address)
     }
-    
+
     /// Execute contract call
     pub fn execute(
         &mut self,
@@ -562,101 +604,109 @@ impl ContractManager {
     ) -> ExecutionResult {
         let contract = match self.contracts.get_mut(address) {
             Some(c) => c,
-            None => return ExecutionResult {
-                success: false,
-                return_value: None,
-                gas_used: 0,
-                logs: vec![],
-                error: Some("Contract not found".to_string()),
-            },
+            None => {
+                return ExecutionResult {
+                    success: false,
+                    return_value: None,
+                    gas_used: 0,
+                    logs: vec![],
+                    error: Some("Contract not found".to_string()),
+                }
+            }
         };
-        
+
         match contract.contract_type {
-            ContractType::DataMarketplace => {
-                match method {
-                    "list_data" => DataMarketplaceContract::list_data(
-                        contract,
-                        &ctx,
-                        params.get("data_hash").cloned().unwrap_or_default(),
-                        params.get("price").and_then(|p| p.parse().ok()).unwrap_or(0),
-                        params.get("category").cloned().unwrap_or_default(),
-                        params.get("description").cloned().unwrap_or_default(),
-                    ),
-                    "purchase_data" => DataMarketplaceContract::purchase_data(
-                        contract,
-                        &ctx,
-                        params.get("data_hash").cloned().unwrap_or_default(),
-                    ),
-                    _ => ExecutionResult {
-                        success: false,
-                        return_value: None,
-                        gas_used: 0,
-                        logs: vec![],
-                        error: Some("Unknown method".to_string()),
-                    },
-                }
-            }
-            ContractType::FederatedLearning => {
-                match method {
-                    "create_task" => FederatedLearningContract::create_task(
-                        contract,
-                        &ctx,
-                        params.get("task_id").cloned().unwrap_or_default(),
-                        params.get("model_type").cloned().unwrap_or_default(),
-                        params.get("min_participants").and_then(|p| p.parse().ok()).unwrap_or(1),
-                        params.get("reward_pool").and_then(|p| p.parse().ok()).unwrap_or(0),
-                    ),
-                    "join_task" => FederatedLearningContract::join_task(
-                        contract,
-                        &ctx,
-                        params.get("task_id").cloned().unwrap_or_default(),
-                    ),
-                    "submit_update" => FederatedLearningContract::submit_update(
-                        contract,
-                        &ctx,
-                        params.get("task_id").cloned().unwrap_or_default(),
-                        params.get("update_hash").cloned().unwrap_or_default(),
-                        params.get("metrics").cloned().unwrap_or_default(),
-                    ),
-                    _ => ExecutionResult {
-                        success: false,
-                        return_value: None,
-                        gas_used: 0,
-                        logs: vec![],
-                        error: Some("Unknown method".to_string()),
-                    },
-                }
-            }
-            ContractType::DeviceRegistry => {
-                match method {
-                    "register_device" => DeviceRegistryContract::register_device(
-                        contract,
-                        &ctx,
-                        params.get("device_id").cloned().unwrap_or_default(),
-                        params.get("device_type").cloned().unwrap_or_default(),
-                        params.get("metadata").cloned().unwrap_or_default(),
-                    ),
-                    "update_status" => DeviceRegistryContract::update_device_status(
-                        contract,
-                        &ctx,
-                        params.get("device_id").cloned().unwrap_or_default(),
-                        params.get("is_active").map(|s| s == "true").unwrap_or(false),
-                    ),
-                    "record_contribution" => DeviceRegistryContract::record_contribution(
-                        contract,
-                        &ctx,
-                        params.get("device_id").cloned().unwrap_or_default(),
-                        params.get("data_hash").cloned().unwrap_or_default(),
-                    ),
-                    _ => ExecutionResult {
-                        success: false,
-                        return_value: None,
-                        gas_used: 0,
-                        logs: vec![],
-                        error: Some("Unknown method".to_string()),
-                    },
-                }
-            }
+            ContractType::DataMarketplace => match method {
+                "list_data" => DataMarketplaceContract::list_data(
+                    contract,
+                    &ctx,
+                    params.get("data_hash").cloned().unwrap_or_default(),
+                    params
+                        .get("price")
+                        .and_then(|p| p.parse().ok())
+                        .unwrap_or(0),
+                    params.get("category").cloned().unwrap_or_default(),
+                    params.get("description").cloned().unwrap_or_default(),
+                ),
+                "purchase_data" => DataMarketplaceContract::purchase_data(
+                    contract,
+                    &ctx,
+                    params.get("data_hash").cloned().unwrap_or_default(),
+                ),
+                _ => ExecutionResult {
+                    success: false,
+                    return_value: None,
+                    gas_used: 0,
+                    logs: vec![],
+                    error: Some("Unknown method".to_string()),
+                },
+            },
+            ContractType::FederatedLearning => match method {
+                "create_task" => FederatedLearningContract::create_task(
+                    contract,
+                    &ctx,
+                    params.get("task_id").cloned().unwrap_or_default(),
+                    params.get("model_type").cloned().unwrap_or_default(),
+                    params
+                        .get("min_participants")
+                        .and_then(|p| p.parse().ok())
+                        .unwrap_or(1),
+                    params
+                        .get("reward_pool")
+                        .and_then(|p| p.parse().ok())
+                        .unwrap_or(0),
+                ),
+                "join_task" => FederatedLearningContract::join_task(
+                    contract,
+                    &ctx,
+                    params.get("task_id").cloned().unwrap_or_default(),
+                ),
+                "submit_update" => FederatedLearningContract::submit_update(
+                    contract,
+                    &ctx,
+                    params.get("task_id").cloned().unwrap_or_default(),
+                    params.get("update_hash").cloned().unwrap_or_default(),
+                    params.get("metrics").cloned().unwrap_or_default(),
+                ),
+                _ => ExecutionResult {
+                    success: false,
+                    return_value: None,
+                    gas_used: 0,
+                    logs: vec![],
+                    error: Some("Unknown method".to_string()),
+                },
+            },
+            ContractType::DeviceRegistry => match method {
+                "register_device" => DeviceRegistryContract::register_device(
+                    contract,
+                    &ctx,
+                    params.get("device_id").cloned().unwrap_or_default(),
+                    params.get("device_type").cloned().unwrap_or_default(),
+                    params.get("metadata").cloned().unwrap_or_default(),
+                ),
+                "update_status" => DeviceRegistryContract::update_device_status(
+                    contract,
+                    &ctx,
+                    params.get("device_id").cloned().unwrap_or_default(),
+                    params
+                        .get("is_active")
+                        .map(|s| s == "true")
+                        .unwrap_or(false),
+                ),
+                "record_contribution" => DeviceRegistryContract::record_contribution(
+                    contract,
+                    &ctx,
+                    params.get("device_id").cloned().unwrap_or_default(),
+                    params.get("data_hash").cloned().unwrap_or_default(),
+                ),
+                _ => ExecutionResult {
+                    success: false,
+                    return_value: None,
+                    gas_used: 0,
+                    logs: vec![],
+                    error: Some("Unknown method".to_string()),
+                },
+            },
             _ => ExecutionResult {
                 success: false,
                 return_value: None,
@@ -671,15 +721,12 @@ impl ContractManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_data_marketplace() {
-        let mut contract = SmartContract::new(
-            ContractType::DataMarketplace,
-            "owner123".to_string(),
-            "",
-        );
-        
+        let mut contract =
+            SmartContract::new(ContractType::DataMarketplace, "owner123".to_string(), "");
+
         let ctx = ExecutionContext {
             caller: "seller123".to_string(),
             contract_address: contract.address.clone(),
@@ -689,7 +736,7 @@ mod tests {
             block_number: 1,
             timestamp: Utc::now(),
         };
-        
+
         let result = DataMarketplaceContract::list_data(
             &mut contract,
             &ctx,
@@ -698,7 +745,7 @@ mod tests {
             "IoT".to_string(),
             "Temperature sensor data".to_string(),
         );
-        
+
         assert!(result.success);
     }
 }

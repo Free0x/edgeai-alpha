@@ -6,16 +6,14 @@
 #![allow(dead_code)]
 
 use actix_web::{web, HttpResponse, Responder};
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use log::info;
 use wasmtime::Val;
 
-use crate::contracts::{
-    WasmRuntime, ExecutionContext, ContractAbi, AbiFunction, AbiParam,
-};
 use super::rest::ApiResponse;
+use crate::contracts::{AbiFunction, AbiParam, ContractAbi, ExecutionContext, WasmRuntime};
 
 /// Contract state (shared across handlers)
 pub struct ContractState {
@@ -142,18 +140,31 @@ pub async fn deploy_contract(
     let abi = ContractAbi {
         name: req.abi.name.clone(),
         version: req.abi.version.clone(),
-        functions: req.abi.functions.iter().map(|f| AbiFunction {
-            name: f.name.clone(),
-            inputs: f.inputs.iter().map(|p| AbiParam {
-                name: p.name.clone(),
-                param_type: p.param_type.clone(),
-            }).collect(),
-            outputs: f.outputs.iter().map(|p| AbiParam {
-                name: p.name.clone(),
-                param_type: p.param_type.clone(),
-            }).collect(),
-            mutates: f.mutates,
-        }).collect(),
+        functions: req
+            .abi
+            .functions
+            .iter()
+            .map(|f| AbiFunction {
+                name: f.name.clone(),
+                inputs: f
+                    .inputs
+                    .iter()
+                    .map(|p| AbiParam {
+                        name: p.name.clone(),
+                        param_type: p.param_type.clone(),
+                    })
+                    .collect(),
+                outputs: f
+                    .outputs
+                    .iter()
+                    .map(|p| AbiParam {
+                        name: p.name.clone(),
+                        param_type: p.param_type.clone(),
+                    })
+                    .collect(),
+                mutates: f.mutates,
+            })
+            .collect(),
         events: vec![],
     };
 
@@ -186,8 +197,10 @@ pub async fn call_contract(
     req: web::Json<CallContractRequest>,
 ) -> impl Responder {
     // Convert JSON args to WASM values
-    let args: Vec<Val> = req.args.iter().map(|v| {
-        match v {
+    let args: Vec<Val> = req
+        .args
+        .iter()
+        .map(|v| match v {
             serde_json::Value::Number(n) => {
                 if let Some(i) = n.as_i64() {
                     Val::I64(i)
@@ -199,8 +212,8 @@ pub async fn call_contract(
             }
             serde_json::Value::Bool(b) => Val::I32(if *b { 1 } else { 0 }),
             _ => Val::I32(0),
-        }
-    }).collect();
+        })
+        .collect();
 
     let context = ExecutionContext {
         contract_address: req.contract.clone(),
@@ -214,23 +227,25 @@ pub async fn call_contract(
     let mut runtime = data.runtime.write().await;
 
     match runtime.execute(&req.contract, &req.function, &args, context) {
-        Ok(result) => {
-            HttpResponse::Ok().json(ApiResponse {
-                success: true,
-                data: Some(CallContractResponse {
-                    success: result.success,
-                    return_data: hex::encode(&result.return_data),
-                    gas_used: result.gas_used,
-                    logs: result.logs.iter().map(|l| LogResponse {
+        Ok(result) => HttpResponse::Ok().json(ApiResponse {
+            success: true,
+            data: Some(CallContractResponse {
+                success: result.success,
+                return_data: hex::encode(&result.return_data),
+                gas_used: result.gas_used,
+                logs: result
+                    .logs
+                    .iter()
+                    .map(|l| LogResponse {
                         contract: l.contract.clone(),
                         topics: l.topics.clone(),
                         data: hex::encode(&l.data),
-                    }).collect(),
-                    error: result.error,
-                }),
-                error: None,
-            })
-        }
+                    })
+                    .collect(),
+                error: result.error,
+            }),
+            error: None,
+        }),
         Err(e) => HttpResponse::BadRequest().json(ApiResponse::<()> {
             success: false,
             data: None,
@@ -248,20 +263,23 @@ pub async fn get_contract(
     let runtime = data.runtime.read().await;
 
     match runtime.get_contract(&address) {
-        Some(contract) => {
-            HttpResponse::Ok().json(ApiResponse {
-                success: true,
-                data: Some(ContractInfoResponse {
-                    address: contract.address,
-                    code_hash: contract.code_hash,
-                    name: contract.abi.name,
-                    version: contract.abi.version,
-                    functions: contract.abi.functions.iter().map(|f| f.name.clone()).collect(),
-                    compiled_at: contract.deployed_at.to_rfc3339(),
-                }),
-                error: None,
-            })
-        }
+        Some(contract) => HttpResponse::Ok().json(ApiResponse {
+            success: true,
+            data: Some(ContractInfoResponse {
+                address: contract.address,
+                code_hash: contract.code_hash,
+                name: contract.abi.name,
+                version: contract.abi.version,
+                functions: contract
+                    .abi
+                    .functions
+                    .iter()
+                    .map(|f| f.name.clone())
+                    .collect(),
+                compiled_at: contract.deployed_at.to_rfc3339(),
+            }),
+            error: None,
+        }),
         None => HttpResponse::NotFound().json(ApiResponse::<()> {
             success: false,
             data: None,

@@ -6,4 +6,4 @@
 pub mod marketplace;
 
 // Core marketplace exports - only export what's actually used
-pub use marketplace::{DataMarketplace, DataListing, DataCategory, SortBy};
+pub use marketplace::{DataCategory, DataListing, DataMarketplace, SortBy};

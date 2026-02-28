@@ -1,39 +1,41 @@
+mod api;
 mod blockchain;
 mod consensus;
 mod contracts;
 mod crypto;
 mod data_market;
-mod network;
-mod api;
 mod iot;
+mod network;
 mod validators;
 
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use actix_web::{web, App, HttpServer, middleware};
 use actix_cors::Cors;
-use actix_web::http::header;
 use actix_files::Files;
-use log::{info, LevelFilter};
+use actix_web::http::header;
+use actix_web::{middleware, web, App, HttpServer};
 use env_logger::Builder;
+use log::{info, LevelFilter};
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-use chrono::{Utc, Timelike};
-use blockchain::{Blockchain, MempoolManager};
-use consensus::{PoIEConsensus, DeviceRegistry, StakingManager, StakingConfig, GovernanceManager, GovernanceConfig};
-use data_market::DataMarketplace;
-use network::{NetworkManager, NodeType};
-use network::libp2p_network::{NetworkConfig, NetworkCommand, NetworkEvent, start_p2p_network};
 use api::{
-    AppState, DeviceState, StakingState, ContractState, GovernanceState, DexState, IoTState,
-    BridgeState, RewardsState, RewardsSystem,
-    configure_routes, configure_wallet_routes, configure_data_routes, 
-    configure_device_routes, configure_staking_routes, configure_contract_routes,
-    configure_governance_routes, configure_dex_routes, configure_iot_routes,
-    configure_bridge_routes, configure_rewards_routes
+    configure_bridge_routes, configure_contract_routes, configure_data_routes,
+    configure_device_routes, configure_dex_routes, configure_governance_routes,
+    configure_iot_routes, configure_rewards_routes, configure_routes, configure_staking_routes,
+    configure_wallet_routes, AppState, BridgeState, ContractState, DeviceState, DexState,
+    GovernanceState, IoTState, RewardsState, RewardsSystem, StakingState,
+};
+use blockchain::{Blockchain, MempoolManager};
+use chrono::{Timelike, Utc};
+use consensus::{
+    DeviceRegistry, GovernanceConfig, GovernanceManager, PoIEConsensus, StakingConfig,
+    StakingManager,
 };
 use contracts::WasmRuntime;
+use data_market::DataMarketplace;
+use network::libp2p_network::{start_p2p_network, NetworkCommand, NetworkConfig, NetworkEvent};
+use network::{NetworkManager, NodeType};
 
 const DATA_DIR: &str = "/data";
 
@@ -44,13 +46,13 @@ async fn main() -> std::io::Result<()> {
         .filter_level(LevelFilter::Info)
         .format_timestamp_secs()
         .init();
-    
+
     info!("============================================");
     info!("   EdgeAI Blockchain Node v0.7.0");
     info!("   The Most Intelligent Data Chain");
     info!("   PoIE 2.0 + OceanBase Cloud Storage!");
     info!("============================================");
-    
+
     // Ensure data directory exists
     if !Path::new(DATA_DIR).exists() {
         info!("Creating data directory at {}", DATA_DIR);
@@ -61,47 +63,77 @@ async fn main() -> std::io::Result<()> {
 
     // Initialize blockchain (will load from local disk first)
     let mut chain_instance = Blockchain::new();
-    
+
     // Initialize OceanBase connection asynchronously
     chain_instance.init_oceanbase().await;
-    
+
     let blockchain = Arc::new(RwLock::new(chain_instance));
-    
+
     // Initialize consensus
     let consensus = Arc::new(RwLock::new(PoIEConsensus::new()));
     info!("PoIE consensus engine initialized");
-    
+
     // Initialize device registry (PoIE 2.0)
     let device_registry = Arc::new(RwLock::new(DeviceRegistry::new()));
     info!("Device Registry initialized (PoIE 2.0)");
-    
+
     // Initialize staking manager with custom config
     let staking_config = StakingConfig {
         min_validator_stake: 10_000,
         min_delegation: 100,
         unbonding_period: 7 * 24 * 60 * 60, // 7 days
         max_validators: 100,
-        slash_double_sign: 0.05,  // 5%
-        slash_downtime: 0.01,     // 1%
-        min_uptime: 0.95,         // 95%
+        slash_double_sign: 0.05, // 5%
+        slash_downtime: 0.01,    // 1%
+        min_uptime: 0.95,        // 95%
         downtime_window: 1000,
         commission_range: (0.0, 0.25), // 0-25%
     };
     // Create staking manager and register initial validators before wrapping in Arc
     let mut staking_mgr = StakingManager::new(staking_config);
-    
+
     // Register initial validators for testnet
     {
         use consensus::ValidatorDescription;
-        
+
         let initial_validators = vec![
-            ("edge_validator_foundation", "EdgeAI Foundation", "Official foundation validator node", 15_000_000, 0.05),
-            ("edge_validator_iot_hub", "IoT Network Hub", "High-performance edge computing node", 12_000_000, 0.08),
-            ("edge_validator_datastream", "DataStream Validator", "Specialized in medical IoT data", 9_500_000, 0.10),
-            ("edge_validator_smartcity", "Smart City Node", "Urban infrastructure data processing", 8_200_000, 0.07),
-            ("edge_validator_green", "Green Energy Validator", "Renewable energy monitoring network", 7_100_000, 0.06),
+            (
+                "edge_validator_foundation",
+                "EdgeAI Foundation",
+                "Official foundation validator node",
+                15_000_000,
+                0.05,
+            ),
+            (
+                "edge_validator_iot_hub",
+                "IoT Network Hub",
+                "High-performance edge computing node",
+                12_000_000,
+                0.08,
+            ),
+            (
+                "edge_validator_datastream",
+                "DataStream Validator",
+                "Specialized in medical IoT data",
+                9_500_000,
+                0.10,
+            ),
+            (
+                "edge_validator_smartcity",
+                "Smart City Node",
+                "Urban infrastructure data processing",
+                8_200_000,
+                0.07,
+            ),
+            (
+                "edge_validator_green",
+                "Green Energy Validator",
+                "Renewable energy monitoring network",
+                7_100_000,
+                0.06,
+            ),
         ];
-        
+
         for (addr, name, desc, stake, commission) in initial_validators {
             let description = ValidatorDescription {
                 moniker: name.to_string(),
@@ -120,10 +152,10 @@ async fn main() -> std::io::Result<()> {
         }
         info!("Registered {} initial validators for testnet", 5);
     }
-    
+
     let staking_manager = Arc::new(RwLock::new(staking_mgr));
     info!("Staking Manager initialized (Delegation + Slashing)");
-    
+
     // Initialize governance manager with custom config
     let governance_config = GovernanceConfig {
         min_deposit: 10_000_000_000_000_000_000_000, // 10,000 EDGE
@@ -136,15 +168,15 @@ async fn main() -> std::io::Result<()> {
     };
     let governance_manager = Arc::new(RwLock::new(GovernanceManager::new(governance_config)));
     info!("Governance Manager initialized (On-chain DAO)");
-    
+
     // Initialize marketplace
     let marketplace = Arc::new(RwLock::new(DataMarketplace::new()));
     info!("Data marketplace initialized");
-    
+
     // Initialize WASM runtime for smart contracts
     let wasm_runtime = Arc::new(RwLock::new(WasmRuntime::new()));
     info!("WASM Smart Contract Runtime initialized");
-    
+
     // Initialize network
     let node_id = format!("node_{}", uuid::Uuid::new_v4().to_string()[..8].to_string());
     let network = Arc::new(NetworkManager::new(
@@ -153,31 +185,31 @@ async fn main() -> std::io::Result<()> {
         8333,
     ));
     info!("Network manager initialized (Node ID: {})", &node_id);
-    
+
     // Initialize libp2p P2P network
     let p2p_port: u16 = std::env::var("EDGEAI_P2P_PORT")
         .unwrap_or_else(|_| "9000".to_string())
         .parse()
         .unwrap_or(9000);
-    
+
     let bootstrap_nodes: Vec<String> = std::env::var("EDGEAI_BOOTSTRAP_NODES")
         .unwrap_or_default()
         .split(',')
         .filter(|s| !s.is_empty())
         .map(|s| s.trim().to_string())
         .collect();
-    
+
     if !bootstrap_nodes.is_empty() {
         info!("Bootstrap nodes: {:?}", bootstrap_nodes);
     }
-    
+
     let p2p_config = NetworkConfig {
         listen_port: p2p_port,
         bootstrap_nodes,
         enable_mdns: true,
         max_peers: 50,
     };
-    
+
     #[allow(unused_mut)]
     let (p2p_command_tx, mut p2p_event_rx) = match start_p2p_network(p2p_config).await {
         Ok((tx, rx)) => {
@@ -185,13 +217,16 @@ async fn main() -> std::io::Result<()> {
             (Some(tx), Some(rx))
         }
         Err(e) => {
-            log::warn!("Failed to start P2P network: {}. Running in standalone mode.", e);
+            log::warn!(
+                "Failed to start P2P network: {}. Running in standalone mode.",
+                e
+            );
             (None, None)
         }
     };
-    
+
     let p2p_tx = Arc::new(tokio::sync::RwLock::new(p2p_command_tx));
-    
+
     // Create app state
     let app_state = web::Data::new(AppState {
         blockchain: blockchain.clone(),
@@ -199,19 +234,19 @@ async fn main() -> std::io::Result<()> {
         marketplace: marketplace.clone(),
         network: network.clone(),
     });
-    
+
     let device_state = web::Data::new(DeviceState {
         registry: device_registry.clone(),
     });
-    
+
     let staking_state = web::Data::new(StakingState {
         manager: staking_manager.clone(),
     });
-    
+
     let contract_state = web::Data::new(ContractState {
         runtime: wasm_runtime.clone(),
     });
-    
+
     let governance_state: web::Data<GovernanceState> = web::Data::new(governance_manager.clone());
 
     let dex_state = web::Data::new(DexState::new());
@@ -256,7 +291,10 @@ async fn main() -> std::io::Result<()> {
                         // TODO: Validate and add block from peer
                     }
                     NetworkEvent::NewContribution(contrib) => {
-                        info!("P2P: Received contribution from {}", &contrib.device_id[..8]);
+                        info!(
+                            "P2P: Received contribution from {}",
+                            &contrib.device_id[..8]
+                        );
                         let mut registry = p2p_device_registry.write().await;
                         if let Some(device) = registry.get_device_mut(&contrib.device_id) {
                             let quality_score = 0.7;
@@ -271,7 +309,7 @@ async fn main() -> std::io::Result<()> {
             }
         });
     }
-    
+
     // Start background mining task with OceanBase async persistence
     let mining_blockchain = blockchain.clone();
     let mining_validator = node_id.clone();
@@ -279,61 +317,67 @@ async fn main() -> std::io::Result<()> {
     let mining_device_registry = device_registry.clone();
     let mining_staking = staking_manager.clone();
     let mining_governance = governance_manager.clone();
-    
+
     tokio::spawn(async move {
         info!("Block producer started (with OceanBase async sync)");
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
-        
+
         loop {
             interval.tick().await;
-            
+
             let mut chain = mining_blockchain.write().await;
             let current_height = chain.chain.len() as u64;
-            
+
             // Update device activity status every 100 blocks
             if current_height % 100 == 0 {
                 let mut registry = mining_device_registry.write().await;
                 registry.update_activity_status(24);
                 let stats = registry.get_stats();
-                info!("Device Registry: {} total, {} active, {} regions", 
-                    stats.total_devices, stats.active_devices, stats.regions_covered);
-                
+                info!(
+                    "Device Registry: {} total, {} active, {} regions",
+                    stats.total_devices, stats.active_devices, stats.regions_covered
+                );
+
                 let mut staking = mining_staking.write().await;
                 let completed = staking.process_unbonding();
                 if !completed.is_empty() {
                     info!("Processed {} unbonding entries", completed.len());
                 }
-                
+
                 let mut governance = mining_governance.write().await;
                 governance.process_expired_deposits();
             }
-            
+
             // Distribute staking rewards every block
             {
                 let mut staking = mining_staking.write().await;
                 let block_reward = 100;
                 staking.distribute_rewards(block_reward);
             }
-            
+
             // Collect pending transactions from mempool
             // Realistic transaction volume: 3-8 tx/block with diurnal variation
             let mut mempool = MempoolManager::with_block_context(current_height);
             let hour_of_day = (Utc::now().hour() + 8) % 24; // Approximate UTC+8 peak hours
             let diurnal_factor = match hour_of_day {
-                6..=9   => 1.4,  // Morning ramp-up
-                10..=13 => 1.8,  // Peak business hours
-                14..=17 => 1.5,  // Afternoon
-                18..=21 => 1.2,  // Evening wind-down
+                6..=9 => 1.4,           // Morning ramp-up
+                10..=13 => 1.8,         // Peak business hours
+                14..=17 => 1.5,         // Afternoon
+                18..=21 => 1.2,         // Evening wind-down
                 22..=23 | 0..=1 => 0.6, // Late night
-                _ => 0.4,        // Deep night (2-5 AM)
+                _ => 0.4,               // Deep night (2-5 AM)
             };
             let base = 3;
             let variation = (current_height % 7) as usize; // 0-6 deterministic jitter
             let batch_size = ((base + variation) as f64 * diurnal_factor) as usize;
             let batch_size = batch_size.max(1).min(15); // Clamp to [1, 15]
             let pending_txs = mempool.collect_pending(batch_size);
-            log::debug!("Mempool: {} pending transactions for block {}", pending_txs.len(), current_height);
-            
+            log::debug!(
+                "Mempool: {} pending transactions for block {}",
+                pending_txs.len(),
+                current_height
+            );
+
             let mut added_count = 0;
             let mut failed_count = 0;
             for tx in pending_txs {
@@ -348,52 +392,61 @@ async fn main() -> std::io::Result<()> {
             if failed_count > 0 {
                 log::warn!("Mempool: {} added, {} rejected", added_count, failed_count);
             }
-            
+
             // Produce new block
             match chain.mine_block(mining_validator.clone()) {
                 Ok((block, affected_accounts)) => {
-                    info!("Produced block #{} with {} transactions", 
-                          block.index, block.transactions.len());
-                    
+                    info!(
+                        "Produced block #{} with {} transactions",
+                        block.index,
+                        block.transactions.len()
+                    );
+
                     // Async persist to OceanBase (non-blocking)
                     chain.persist_block_async(&block).await;
-                    
+
                     // Sync affected accounts to OceanBase every block
                     chain.persist_accounts_async(&affected_accounts).await;
-                    
+
                     // Sync metadata to OceanBase every 10 blocks
                     if block.index % 10 == 0 {
                         chain.persist_state_async().await;
                     }
-                    
+
                     // Broadcast block to P2P network
                     let p2p_guard = mining_p2p_tx.read().await;
                     if let Some(ref tx) = *p2p_guard {
                         let _ = tx.send(NetworkCommand::BroadcastBlock(block.clone())).await;
                     }
-                },
+                }
                 Err(e) => {
                     log::warn!("Block production failed: {}", e);
                 }
             }
         }
     });
-    
+
     let bind_address = "0.0.0.0:8080";
     info!("Starting HTTP server at http://{}", bind_address);
     info!("API endpoints available at http://{}/api/", bind_address);
-    info!("Device Registry API at http://{}/api/devices/", bind_address);
+    info!(
+        "Device Registry API at http://{}/api/devices/",
+        bind_address
+    );
     info!("Staking API at http://{}/api/staking/", bind_address);
-    info!("Smart Contracts API at http://{}/api/contracts/", bind_address);
+    info!(
+        "Smart Contracts API at http://{}/api/contracts/",
+        bind_address
+    );
     info!("Governance API at http://{}/api/governance/", bind_address);
     info!("DEX API at http://{}/api/dex/", bind_address);
     info!("Rewards API at http://{}/api/rewards/", bind_address);
     info!("Block Explorer available at http://{}/", bind_address);
-    
+
     // Start HTTP server
     HttpServer::new(move || {
         let cors = Cors::permissive();
-        
+
         App::new()
             .wrap(cors)
             .wrap(middleware::Logger::default())

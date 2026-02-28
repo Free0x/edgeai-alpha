@@ -6,14 +6,14 @@
 #![allow(dead_code)]
 
 use actix_web::{web, HttpResponse, Responder};
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use log::info;
 
-use crate::blockchain::{Blockchain, Transaction, Block};
-use crate::consensus::{PoIEConsensus};
-use crate::data_market::{DataMarketplace, DataListing, DataCategory, SortBy};
+use crate::blockchain::{Block, Blockchain, Transaction};
+use crate::consensus::PoIEConsensus;
+use crate::data_market::{DataCategory, DataListing, DataMarketplace, SortBy};
 use crate::network::NetworkManager;
 
 // Re-export Validator for use in handlers
@@ -44,7 +44,7 @@ impl<T: Serialize> ApiResponse<T> {
             error: None,
         }
     }
-    
+
     pub fn error(msg: &str) -> Self {
         ApiResponse {
             success: false,
@@ -130,23 +130,17 @@ pub async fn get_blocks(
     let blockchain = data.blockchain.read().await;
     let start = query.offset.unwrap_or(0) as usize;
     let limit = query.limit.unwrap_or(10) as usize;
-    
-    let blocks: Vec<&Block> = blockchain.chain.iter()
-        .skip(start)
-        .take(limit)
-        .collect();
-    
+
+    let blocks: Vec<&Block> = blockchain.chain.iter().skip(start).take(limit).collect();
+
     HttpResponse::Ok().json(ApiResponse::success(blocks))
 }
 
 /// Get block by index
-pub async fn get_block(
-    data: web::Data<AppState>,
-    path: web::Path<u64>,
-) -> impl Responder {
+pub async fn get_block(data: web::Data<AppState>, path: web::Path<u64>) -> impl Responder {
     let index = path.into_inner();
     let blockchain = data.blockchain.read().await;
-    
+
     match blockchain.get_block(index) {
         Some(block) => HttpResponse::Ok().json(ApiResponse::success(block)),
         None => HttpResponse::NotFound().json(ApiResponse::<()>::error("Block not found")),
@@ -160,7 +154,7 @@ pub async fn get_block_by_hash(
 ) -> impl Responder {
     let hash = path.into_inner();
     let blockchain = data.blockchain.read().await;
-    
+
     match blockchain.get_block_by_hash(&hash) {
         Some(block) => HttpResponse::Ok().json(ApiResponse::success(block)),
         None => HttpResponse::NotFound().json(ApiResponse::<()>::error("Block not found")),
@@ -177,13 +171,10 @@ pub async fn get_latest_block(data: web::Data<AppState>) -> impl Responder {
 // ============ Transaction Endpoints ============
 
 /// Get transaction by hash
-pub async fn get_transaction(
-    data: web::Data<AppState>,
-    path: web::Path<String>,
-) -> impl Responder {
+pub async fn get_transaction(data: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
     let hash = path.into_inner();
     let blockchain = data.blockchain.read().await;
-    
+
     match blockchain.get_transaction(&hash) {
         Some(tx) => HttpResponse::Ok().json(ApiResponse::success(tx)),
         None => HttpResponse::NotFound().json(ApiResponse::<()>::error("Transaction not found")),
@@ -198,7 +189,7 @@ pub async fn get_recent_transactions(
     let blockchain = data.blockchain.read().await;
     let offset = query.offset.unwrap_or(0) as usize;
     let limit = query.limit.unwrap_or(20) as usize;
-    
+
     // Collect transactions from in-memory blocks (most recent first)
     let mut all_txs: Vec<&Transaction> = Vec::new();
     for block in blockchain.chain.iter().rev() {
@@ -206,13 +197,10 @@ pub async fn get_recent_transactions(
             all_txs.push(tx);
         }
     }
-    
+
     let total = all_txs.len();
-    let txs: Vec<&Transaction> = all_txs.into_iter()
-        .skip(offset)
-        .take(limit)
-        .collect();
-    
+    let txs: Vec<&Transaction> = all_txs.into_iter().skip(offset).take(limit).collect();
+
     #[derive(Serialize)]
     struct TransactionsResponse<'a> {
         transactions: Vec<&'a Transaction>,
@@ -220,7 +208,7 @@ pub async fn get_recent_transactions(
         offset: usize,
         limit: usize,
     }
-    
+
     HttpResponse::Ok().json(TransactionsResponse {
         transactions: txs,
         total,
@@ -240,19 +228,17 @@ pub async fn create_transfer(
     data: web::Data<AppState>,
     body: web::Json<TransferRequest>,
 ) -> impl Responder {
-    let tx = Transaction::transfer(
-        body.from.clone(),
-        body.to.clone(),
-        body.amount,
-    );
-    
+    let tx = Transaction::transfer(body.from.clone(), body.to.clone(), body.amount);
+
     let mut blockchain = data.blockchain.write().await;
     match blockchain.add_transaction(tx) {
         Ok(hash) => {
-            info!("Transfer created: {} -> {} ({} tokens)", 
-                &body.from[..8.min(body.from.len())], 
-                &body.to[..8.min(body.to.len())], 
-                body.amount);
+            info!(
+                "Transfer created: {} -> {} ({} tokens)",
+                &body.from[..8.min(body.from.len())],
+                &body.to[..8.min(body.to.len())],
+                body.amount
+            );
             HttpResponse::Ok().json(ApiResponse::success(hash))
         }
         Err(e) => HttpResponse::BadRequest().json(ApiResponse::<()>::error(&e)),
@@ -264,28 +250,30 @@ pub async fn create_data_contribution(
     data: web::Data<AppState>,
     body: web::Json<DataContributionRequest>,
 ) -> impl Responder {
-    let tx = Transaction::data_contribution(
-        body.sender.clone(),
-        body.data.clone(),
-        body.sender.clone(),
-    );
-    
-    let quality_score = tx.data_quality.as_ref()
+    let tx =
+        Transaction::data_contribution(body.sender.clone(), body.data.clone(), body.sender.clone());
+
+    let quality_score = tx
+        .data_quality
+        .as_ref()
         .map(|q| q.overall_score)
         .unwrap_or(0.0);
-    
+
     let mut blockchain = data.blockchain.write().await;
     match blockchain.add_transaction(tx) {
         Ok(hash) => {
-            info!("Data contribution: {} (quality: {:.2})", 
-                &body.sender[..8.min(body.sender.len())], quality_score);
-            
+            info!(
+                "Data contribution: {} (quality: {:.2})",
+                &body.sender[..8.min(body.sender.len())],
+                quality_score
+            );
+
             #[derive(Serialize)]
             struct ContributionResponse {
                 tx_hash: String,
                 quality_score: f64,
             }
-            
+
             HttpResponse::Ok().json(ApiResponse::success(ContributionResponse {
                 tx_hash: hash,
                 quality_score,
@@ -298,13 +286,10 @@ pub async fn create_data_contribution(
 // ============ Account Endpoints ============
 
 /// Get account info
-pub async fn get_account(
-    data: web::Data<AppState>,
-    path: web::Path<String>,
-) -> impl Responder {
+pub async fn get_account(data: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
     let address = path.into_inner();
     let blockchain = data.blockchain.read().await;
-    
+
     match blockchain.get_account(&address) {
         Some(account) => HttpResponse::Ok().json(ApiResponse::success(account)),
         None => HttpResponse::NotFound().json(ApiResponse::<()>::error("Account not found")),
@@ -312,35 +297,34 @@ pub async fn get_account(
 }
 
 /// Faucet - Give test tokens to an address (testnet only)
-pub async fn faucet(
-    data: web::Data<AppState>,
-    body: web::Json<FaucetRequest>,
-) -> impl Responder {
+pub async fn faucet(data: web::Data<AppState>, body: web::Json<FaucetRequest>) -> impl Responder {
     let mut blockchain = data.blockchain.write().await;
     let amount = body.amount.unwrap_or(1000);
-    
+
     // For testnet: directly credit the account balance without requiring sender balance
     // Get or create the account and add tokens directly
     {
         use crate::blockchain::chain::Account;
-        let account = blockchain.state.accounts
+        let account = blockchain
+            .state
+            .accounts
             .entry(body.address.clone())
             .or_insert_with(|| Account::new(body.address.clone()));
         account.balance += amount;
     }
-    
+
     // Create a record transaction hash for the faucet distribution
     let tx_hash = format!("faucet_{}_{}", body.address, chrono::Utc::now().timestamp());
-    
+
     info!("Faucet: credited {} tokens to {}", amount, &body.address);
-    
+
     #[derive(Serialize)]
     struct FaucetResponse {
         address: String,
         amount: u64,
         transaction_hash: String,
     }
-    
+
     HttpResponse::Ok().json(ApiResponse::success(FaucetResponse {
         address: body.address.clone(),
         amount,
@@ -349,20 +333,17 @@ pub async fn faucet(
 }
 
 /// Get account balance
-pub async fn get_balance(
-    data: web::Data<AppState>,
-    path: web::Path<String>,
-) -> impl Responder {
+pub async fn get_balance(data: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
     let address = path.into_inner();
     let blockchain = data.blockchain.read().await;
     let balance = blockchain.get_balance(&address);
-    
+
     #[derive(Serialize)]
     struct BalanceResponse {
         address: String,
         balance: u64,
     }
-    
+
     HttpResponse::Ok().json(ApiResponse::success(BalanceResponse { address, balance }))
 }
 
@@ -385,16 +366,20 @@ pub async fn mine_block(
     body: web::Json<MineBlockRequest>,
 ) -> impl Responder {
     let mut blockchain = data.blockchain.write().await;
-    
+
     match blockchain.mine_block(body.validator.clone()) {
         Ok((block, affected_accounts)) => {
-            info!("Block #{} mined by {} ({} accounts affected)", 
-                  block.index, &body.validator[..8.min(body.validator.len())], affected_accounts.len());
-            
+            info!(
+                "Block #{} mined by {} ({} accounts affected)",
+                block.index,
+                &body.validator[..8.min(body.validator.len())],
+                affected_accounts.len()
+            );
+
             // Async persist to OceanBase
             blockchain.persist_block_async(&block).await;
             blockchain.persist_accounts_async(&affected_accounts).await;
-            
+
             HttpResponse::Ok().json(ApiResponse::success(block))
         }
         Err(e) => HttpResponse::BadRequest().json(ApiResponse::<()>::error(&e)),
@@ -416,11 +401,14 @@ pub async fn register_validator(
     body: web::Json<RegisterValidatorRequest>,
 ) -> impl Responder {
     let mut consensus = data.consensus.write().await;
-    
+
     match consensus.register_validator(body.address.clone(), body.stake) {
         Ok(_) => {
-            info!("Validator registered: {} (stake: {})", 
-                &body.address[..8.min(body.address.len())], body.stake);
+            info!(
+                "Validator registered: {} (stake: {})",
+                &body.address[..8.min(body.address.len())],
+                body.stake
+            );
             HttpResponse::Ok().json(ApiResponse::success("Validator registered"))
         }
         Err(e) => HttpResponse::BadRequest().json(ApiResponse::<()>::error(&e)),
@@ -436,7 +424,7 @@ pub async fn list_data(
 ) -> impl Responder {
     let data_hash = Transaction::hash_data(&body.data);
     let quality = Transaction::calculate_data_quality(&body.data);
-    
+
     let listing = DataListing::new(
         data_hash.clone(),
         body.owner.clone(),
@@ -448,19 +436,23 @@ pub async fn list_data(
         quality.entropy_score,
         body.data.len() as u64,
     );
-    
+
     let mut marketplace = data.marketplace.write().await;
     match marketplace.list_data(listing) {
         Ok(id) => {
-            info!("Data listed: {} by {}", &data_hash[..8], &body.owner[..8.min(body.owner.len())]);
-            
+            info!(
+                "Data listed: {} by {}",
+                &data_hash[..8],
+                &body.owner[..8.min(body.owner.len())]
+            );
+
             #[derive(Serialize)]
             struct ListingResponse {
                 listing_id: String,
                 data_hash: String,
                 quality_score: f64,
             }
-            
+
             HttpResponse::Ok().json(ApiResponse::success(ListingResponse {
                 listing_id: id,
                 data_hash,
@@ -477,10 +469,12 @@ pub async fn get_marketplace_listings(
     query: web::Query<SearchQuery>,
 ) -> impl Responder {
     let marketplace = data.marketplace.read().await;
-    
-    let category = query.category.as_ref()
+
+    let category = query
+        .category
+        .as_ref()
         .map(|c| DataCategory::from_string(c));
-    
+
     let sort_by = match query.sort_by.as_deref() {
         Some("price_asc") => SortBy::PriceAsc,
         Some("price_desc") => SortBy::PriceDesc,
@@ -489,7 +483,7 @@ pub async fn get_marketplace_listings(
         Some("rating") => SortBy::RatingDesc,
         _ => SortBy::Newest,
     };
-    
+
     let listings = marketplace.search(
         query.query.as_deref(),
         category.as_ref(),
@@ -499,7 +493,7 @@ pub async fn get_marketplace_listings(
         sort_by,
         query.limit.unwrap_or(50),
     );
-    
+
     HttpResponse::Ok().json(ApiResponse::success(listings))
 }
 
@@ -516,11 +510,14 @@ pub async fn purchase_data(
     body: web::Json<PurchaseDataRequest>,
 ) -> impl Responder {
     let mut marketplace = data.marketplace.write().await;
-    
+
     match marketplace.purchase_data(&body.data_hash, &body.buyer) {
         Ok(purchase) => {
-            info!("Data purchased: {} by {}", 
-                &body.data_hash[..8], &body.buyer[..8.min(body.buyer.len())]);
+            info!(
+                "Data purchased: {} by {}",
+                &body.data_hash[..8],
+                &body.buyer[..8.min(body.buyer.len())]
+            );
             HttpResponse::Ok().json(ApiResponse::success(purchase))
         }
         Err(e) => HttpResponse::BadRequest().json(ApiResponse::<()>::error(&e)),
@@ -528,13 +525,10 @@ pub async fn purchase_data(
 }
 
 /// Get listing by hash
-pub async fn get_listing(
-    data: web::Data<AppState>,
-    path: web::Path<String>,
-) -> impl Responder {
+pub async fn get_listing(data: web::Data<AppState>, path: web::Path<String>) -> impl Responder {
     let hash = path.into_inner();
     let marketplace = data.marketplace.read().await;
-    
+
     match marketplace.get_listing(&hash) {
         Some(listing) => HttpResponse::Ok().json(ApiResponse::success(listing)),
         None => HttpResponse::NotFound().json(ApiResponse::<()>::error("Listing not found")),
@@ -573,47 +567,60 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         .route("/api/blocks/latest", web::get().to(get_latest_block))
         .route("/api/blocks/{index}", web::get().to(get_block))
         .route("/api/blocks/hash/{hash}", web::get().to(get_block_by_hash))
-        
         // Transaction routes
         .route("/api/transactions", web::get().to(get_recent_transactions))
-        .route("/api/transactions/pending", web::get().to(get_pending_transactions))
+        .route(
+            "/api/transactions/pending",
+            web::get().to(get_pending_transactions),
+        )
         .route("/api/transactions/{hash}", web::get().to(get_transaction))
-        .route("/api/transactions/transfer", web::post().to(create_transfer))
-        .route("/api/transactions/contribute", web::post().to(create_data_contribution))
-        
+        .route(
+            "/api/transactions/transfer",
+            web::post().to(create_transfer),
+        )
+        .route(
+            "/api/transactions/contribute",
+            web::post().to(create_data_contribution),
+        )
         // Account routes
         .route("/api/accounts/{address}", web::get().to(get_account))
-        .route("/api/accounts/{address}/balance", web::get().to(get_balance))
-        .route("/api/accounts/{address}/transactions", web::get().to(get_account_transactions))
-        
+        .route(
+            "/api/accounts/{address}/balance",
+            web::get().to(get_balance),
+        )
+        .route(
+            "/api/accounts/{address}/transactions",
+            web::get().to(get_account_transactions),
+        )
         // Faucet route (for testnet)
         .route("/api/faucet", web::post().to(faucet))
-        
         // Mining routes
         .route("/api/mine", web::post().to(mine_block))
-        
         // Consensus routes
         .route("/api/validators", web::get().to(get_validators))
-        .route("/api/validators/register", web::post().to(register_validator))
-        
+        .route(
+            "/api/validators/register",
+            web::post().to(register_validator),
+        )
         // Marketplace routes
         .route("/api/marketplace", web::get().to(get_marketplace_listings))
-        .route("/api/marketplace/stats", web::get().to(get_marketplace_stats))
+        .route(
+            "/api/marketplace/stats",
+            web::get().to(get_marketplace_stats),
+        )
         .route("/api/marketplace/list", web::post().to(list_data))
         .route("/api/marketplace/purchase", web::post().to(purchase_data))
         .route("/api/marketplace/{hash}", web::get().to(get_listing))
-        
         // Network routes
         .route("/api/network", web::get().to(get_network_stats))
         .route("/api/network/peers", web::get().to(get_peers))
-        
         // Health & Status routes
         .route("/api/status", web::get().to(get_status))
         .route("/api/health", web::get().to(health_check));
-    
+
     // Configure IoT routes
     super::iot::configure_iot_routes(cfg);
-    
+
     // Configure Rewards routes
     super::rewards::configure_rewards_routes(cfg);
 }
@@ -629,8 +636,11 @@ pub async fn health_check() -> impl Responder {
 /// Status endpoint with basic info
 pub async fn get_status(data: web::Data<AppState>) -> impl Responder {
     let blockchain = data.blockchain.read().await;
-    let height = blockchain.chain.len() as u64 + blockchain.total_blocks.saturating_sub(blockchain.chain.len() as u64);
-    
+    let height = blockchain.chain.len() as u64
+        + blockchain
+            .total_blocks
+            .saturating_sub(blockchain.chain.len() as u64);
+
     HttpResponse::Ok().json(serde_json::json!({
         "status": "running",
         "version": "0.6.0",

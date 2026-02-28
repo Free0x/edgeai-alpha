@@ -5,11 +5,11 @@
 
 #![allow(dead_code)]
 
-use std::collections::HashMap;
 use crate::validators::types::{
-    ValidatorNode, ValidatorStatus, ValidatorLocation, ValidatorStats,
-    GlobeMarker, ValidatorMapResponse,
+    GlobeMarker, ValidatorLocation, ValidatorMapResponse, ValidatorNode, ValidatorStats,
+    ValidatorStatus,
 };
+use std::collections::HashMap;
 
 /// 确定性随机数生成器（正弦方法）
 pub struct SeededRandom {
@@ -170,7 +170,7 @@ impl ValidatorGenerator {
         }
 
         let mut entropy = 0.0f64;
-        
+
         // 为了性能，我们抽样计算熵值
         let sample_size = self.total_count.min(1000);
         let step = if self.total_count > sample_size {
@@ -222,12 +222,16 @@ impl ValidatorGenerator {
             .map(|(name, (loc, count))| {
                 // 根据验证者数量调整大小
                 let size = 0.03 + (count as f64 / self.total_count as f64) * 0.15;
-                
+
                 GlobeMarker {
                     location: (loc.lat, loc.lng),
                     size,
                     tooltip: format!("{} ({} nodes)", name, count),
-                    marker_type: if count > 1000 { "hub".to_string() } else { "node".to_string() },
+                    marker_type: if count > 1000 {
+                        "hub".to_string()
+                    } else {
+                        "node".to_string()
+                    },
                     validator_count: count,
                 }
             })

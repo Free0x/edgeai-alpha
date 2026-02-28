@@ -3,12 +3,12 @@
 //! Provides request rate limiting to prevent abuse and ensure fair usage.
 //! Uses token bucket algorithm for smooth rate limiting.
 
+use actix_web::{dev::ServiceRequest, HttpRequest, HttpResponse};
+use log::warn;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use actix_web::{HttpRequest, HttpResponse, dev::ServiceRequest};
-use log::warn;
 
 /// Token bucket for rate limiting
 #[derive(Clone)]
@@ -84,7 +84,7 @@ pub struct RateLimitConfig {
 impl Default for RateLimitConfig {
     fn default() -> Self {
         Self {
-            max_requests: 100,      // 100 request burst
+            max_requests: 100,         // 100 request burst
             requests_per_second: 10.0, // 10 requests/second sustained
             window_secs: 60,
         }
@@ -150,18 +150,15 @@ impl RateLimiter {
     /// Check if request is allowed for given key and tier
     pub async fn check(&self, key: &str, tier: RateLimitTier) -> RateLimitResult {
         let config = tier.config();
-        
+
         // Periodic cleanup of old buckets
         self.maybe_cleanup().await;
-        
+
         let mut buckets = self.buckets.write().await;
-        let bucket = buckets
-            .entry(key.to_string())
-            .or_insert_with(|| TokenBucket::new(
-                config.max_requests as f64,
-                config.requests_per_second,
-            ));
-        
+        let bucket = buckets.entry(key.to_string()).or_insert_with(|| {
+            TokenBucket::new(config.max_requests as f64, config.requests_per_second)
+        });
+
         if bucket.try_consume() {
             RateLimitResult::Allowed {
                 remaining: bucket.remaining() as u32,
@@ -183,19 +180,19 @@ impl RateLimiter {
             let last = self.last_cleanup.read().await;
             last.elapsed() > self.cleanup_interval
         };
-        
+
         if should_cleanup {
             let mut buckets = self.buckets.write().await;
             let before = buckets.len();
-            
+
             // Remove buckets that are full (haven't been used recently)
             buckets.retain(|_, bucket| bucket.remaining() < bucket.max_tokens * 0.9);
-            
+
             let removed = before - buckets.len();
             if removed > 0 {
                 log::info!("Rate limiter cleanup: removed {} inactive buckets", removed);
             }
-            
+
             *self.last_cleanup.write().await = Instant::now();
         }
     }
@@ -210,7 +207,7 @@ impl RateLimiter {
                 }
             }
         }
-        
+
         // Fall back to peer address
         req.peer_addr()
             .map(|addr| addr.ip().to_string())
@@ -221,14 +218,8 @@ impl RateLimiter {
 /// Result of rate limit check
 #[derive(Debug, Clone)]
 pub enum RateLimitResult {
-    Allowed {
-        remaining: u32,
-        limit: u32,
-    },
-    Exceeded {
-        retry_after_secs: u64,
-        limit: u32,
-    },
+    Allowed { remaining: u32, limit: u32 },
+    Exceeded { retry_after_secs: u64, limit: u32 },
 }
 
 impl RateLimitResult {
@@ -249,7 +240,10 @@ impl RateLimitResult {
                     actix_web::http::header::HeaderValue::from_str(&remaining.to_string()).unwrap(),
                 );
             }
-            RateLimitResult::Exceeded { retry_after_secs, limit } => {
+            RateLimitResult::Exceeded {
+                retry_after_secs,
+                limit,
+            } => {
                 response.headers_mut().insert(
                     actix_web::http::header::HeaderName::from_static("x-ratelimit-limit"),
                     actix_web::http::header::HeaderValue::from_str(&limit.to_string()).unwrap(),
@@ -260,7 +254,8 @@ impl RateLimitResult {
                 );
                 response.headers_mut().insert(
                     actix_web::http::header::HeaderName::from_static("retry-after"),
-                    actix_web::http::header::HeaderValue::from_str(&retry_after_secs.to_string()).unwrap(),
+                    actix_web::http::header::HeaderValue::from_str(&retry_after_secs.to_string())
+                        .unwrap(),
                 );
             }
         }
@@ -282,12 +277,12 @@ mod tests {
     #[test]
     fn test_token_bucket() {
         let mut bucket = TokenBucket::new(10.0, 1.0);
-        
+
         // Should be able to consume 10 tokens
         for _ in 0..10 {
             assert!(bucket.try_consume());
         }
-        
+
         // 11th should fail
         assert!(!bucket.try_consume());
     }
@@ -295,7 +290,7 @@ mod tests {
     #[tokio::test]
     async fn test_rate_limiter() {
         let limiter = RateLimiter::new();
-        
+
         // First request should be allowed
         let result = limiter.check("test_client", RateLimitTier::Anonymous).await;
         assert!(result.is_allowed());

@@ -6,13 +6,13 @@
 //! - Request size limits
 //! - Security headers
 
+use actix_web::{HttpRequest, HttpResponse};
+use log::{info, warn};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use actix_web::{HttpRequest, HttpResponse};
-use log::{warn, info};
-use serde::{Serialize, Deserialize};
 
 /// Security configuration
 #[derive(Clone)]
@@ -124,14 +124,17 @@ impl SecurityManager {
     pub async fn block_ip(&self, ip: String, reason: String) {
         let now = Instant::now();
         let expires_at = now + Duration::from_secs(self.config.block_duration);
-        
+
         let mut blocked = self.blocked_ips.write().await;
-        blocked.insert(ip.clone(), BlockEntry {
-            blocked_at: now,
-            reason: reason.clone(),
-            expires_at,
-        });
-        
+        blocked.insert(
+            ip.clone(),
+            BlockEntry {
+                blocked_at: now,
+                reason: reason.clone(),
+                expires_at,
+            },
+        );
+
         warn!("Blocked IP {} for: {}", ip, reason);
     }
 
@@ -139,12 +142,14 @@ impl SecurityManager {
     pub async fn record_failed_request(&self, ip: &str) -> bool {
         let now = Instant::now();
         let window = Duration::from_secs(self.config.failed_request_window);
-        
+
         let mut trackers = self.failed_requests.write().await;
-        let tracker = trackers.entry(ip.to_string()).or_insert(FailedRequestTracker {
-            count: 0,
-            window_start: now,
-        });
+        let tracker = trackers
+            .entry(ip.to_string())
+            .or_insert(FailedRequestTracker {
+                count: 0,
+                window_start: now,
+            });
 
         // Reset if window expired
         if now.duration_since(tracker.window_start) > window {
@@ -155,7 +160,7 @@ impl SecurityManager {
         tracker.count += 1;
         let count = tracker.count;
         let should_block = count >= self.config.max_failed_requests;
-        
+
         // Release lock before potentially blocking
         drop(trackers);
 
@@ -164,7 +169,8 @@ impl SecurityManager {
             self.block_ip(
                 ip.to_string(),
                 format!("Too many failed requests: {}", count),
-            ).await;
+            )
+            .await;
             return true;
         }
 
@@ -176,7 +182,10 @@ impl SecurityManager {
         // Check URL length
         let url_len = req.uri().to_string().len();
         if url_len > self.config.max_url_length {
-            return Err(SecurityError::UrlTooLong(url_len, self.config.max_url_length));
+            return Err(SecurityError::UrlTooLong(
+                url_len,
+                self.config.max_url_length,
+            ));
         }
 
         // Check for suspicious patterns in URL
@@ -186,13 +195,17 @@ impl SecurityManager {
         }
 
         // Check headers
-        let header_size: usize = req.headers()
+        let header_size: usize = req
+            .headers()
             .iter()
             .map(|(k, v)| k.as_str().len() + v.len())
             .sum();
-        
+
         if header_size > self.config.max_header_size {
-            return Err(SecurityError::HeadersTooLarge(header_size, self.config.max_header_size));
+            return Err(SecurityError::HeadersTooLarge(
+                header_size,
+                self.config.max_header_size,
+            ));
         }
 
         Ok(())
@@ -202,18 +215,37 @@ impl SecurityManager {
     fn contains_suspicious_pattern(&self, input: &str) -> bool {
         let suspicious_patterns = [
             // SQL injection
-            "' OR ", "' AND ", "1=1", "DROP TABLE", "DELETE FROM", "INSERT INTO",
-            "UNION SELECT", "--", "/*", "*/",
+            "' OR ",
+            "' AND ",
+            "1=1",
+            "DROP TABLE",
+            "DELETE FROM",
+            "INSERT INTO",
+            "UNION SELECT",
+            "--",
+            "/*",
+            "*/",
             // XSS
-            "<script", "javascript:", "onerror=", "onload=",
+            "<script",
+            "javascript:",
+            "onerror=",
+            "onload=",
             // Path traversal
-            "../", "..\\", "%2e%2e",
+            "../",
+            "..\\",
+            "%2e%2e",
             // Command injection
-            "; ls", "; cat", "| cat", "$(", "`",
+            "; ls",
+            "; cat",
+            "| cat",
+            "$(",
+            "`",
         ];
 
         let lower = input.to_lowercase();
-        suspicious_patterns.iter().any(|p| lower.contains(&p.to_lowercase()))
+        suspicious_patterns
+            .iter()
+            .any(|p| lower.contains(&p.to_lowercase()))
     }
 
     /// Get security headers
@@ -222,7 +254,10 @@ impl SecurityManager {
             ("X-Content-Type-Options", "nosniff".to_string()),
             ("X-Frame-Options", "DENY".to_string()),
             ("X-XSS-Protection", "1; mode=block".to_string()),
-            ("Referrer-Policy", "strict-origin-when-cross-origin".to_string()),
+            (
+                "Referrer-Policy",
+                "strict-origin-when-cross-origin".to_string(),
+            ),
         ];
 
         if self.config.enable_hsts {
@@ -245,13 +280,13 @@ impl SecurityManager {
     /// Clean up expired blocks
     pub async fn cleanup_expired(&self) {
         let now = Instant::now();
-        
+
         // Clean blocked IPs
         let mut blocked = self.blocked_ips.write().await;
         let before = blocked.len();
         blocked.retain(|_, entry| now < entry.expires_at);
         let removed = before - blocked.len();
-        
+
         if removed > 0 {
             info!("Cleaned up {} expired IP blocks", removed);
         }
@@ -266,7 +301,7 @@ impl SecurityManager {
     pub async fn stats(&self) -> SecurityStats {
         let blocked = self.blocked_ips.read().await;
         let trackers = self.failed_requests.read().await;
-        
+
         SecurityStats {
             blocked_ips: blocked.len(),
             permanent_blocklist_size: self.permanent_blocklist.len(),
@@ -354,7 +389,7 @@ pub mod sanitize {
     /// Validate and sanitize address format
     pub fn validate_address(address: &str) -> Result<String, &'static str> {
         let sanitized = sanitize_string(address);
-        
+
         // Check length
         if sanitized.len() < 8 || sanitized.len() > 128 {
             return Err("Invalid address length");
@@ -371,7 +406,7 @@ pub mod sanitize {
     /// Validate transaction hash format
     pub fn validate_tx_hash(hash: &str) -> Result<String, &'static str> {
         let sanitized = sanitize_string(hash);
-        
+
         // Check for hex format
         if !sanitized.chars().all(|c| c.is_ascii_hexdigit() || c == 'x') {
             return Err("Invalid hash format");
@@ -399,13 +434,15 @@ mod tests {
     #[tokio::test]
     async fn test_ip_blocking() {
         let manager = SecurityManager::new(SecurityConfig::default());
-        
+
         // Initially not blocked
         assert!(manager.is_blocked("192.168.1.1").await.is_none());
-        
+
         // Block IP
-        manager.block_ip("192.168.1.1".to_string(), "Test block".to_string()).await;
-        
+        manager
+            .block_ip("192.168.1.1".to_string(), "Test block".to_string())
+            .await;
+
         // Now blocked
         assert!(manager.is_blocked("192.168.1.1").await.is_some());
     }

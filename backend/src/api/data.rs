@@ -161,11 +161,12 @@ pub fn configure_data_routes(cfg: &mut web::ServiceConfig) {
         // IoT routes
         .route("/api/iot/transactions", web::get().to(get_iot_transactions))
         .route("/api/iot/sectors", web::get().to(get_iot_sectors))
-        
         // Validator routes (new)
         .route("/api/validators/nodes", web::get().to(get_validator_nodes))
         .route("/api/validators/map", web::get().to(get_validator_map))
-        
         // Enhanced network stats
-        .route("/api/network/stats", web::get().to(get_network_stats_enhanced));
+        .route(
+            "/api/network/stats",
+            web::get().to(get_network_stats_enhanced),
+        );
 }

@@ -22,11 +22,11 @@
 #![allow(dead_code)]
 
 use actix_web::{web, HttpResponse, Responder};
+use chrono::Utc;
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use log::{info, warn, error};
-use chrono::Utc;
 
 use crate::blockchain::Blockchain;
 
@@ -227,13 +227,19 @@ pub async fn bridge_lock(
     state: web::Data<BridgeState>,
     body: web::Json<BridgeLockRequest>,
 ) -> impl Responder {
-    let target_chain = body.target_chain.clone().unwrap_or_else(|| "bsc".to_string());
+    let target_chain = body
+        .target_chain
+        .clone()
+        .unwrap_or_else(|| "bsc".to_string());
 
     // Validate target chain
     if !is_supported_chain(&target_chain) {
         return BridgeResponse::<()>::error(
             actix_web::http::StatusCode::BAD_REQUEST,
-            &format!("Unsupported target chain: {}. Supported: bsc, ethereum, base, arbitrum, solana", target_chain),
+            &format!(
+                "Unsupported target chain: {}. Supported: bsc, ethereum, base, arbitrum, solana",
+                target_chain
+            ),
         );
     }
 
@@ -249,13 +255,19 @@ pub async fn bridge_lock(
     if body.amount < MIN_BRIDGE_AMOUNT {
         return BridgeResponse::<()>::error(
             actix_web::http::StatusCode::BAD_REQUEST,
-            &format!("Amount too small. Minimum bridge amount is {} EDGE.", MIN_BRIDGE_AMOUNT),
+            &format!(
+                "Amount too small. Minimum bridge amount is {} EDGE.",
+                MIN_BRIDGE_AMOUNT
+            ),
         );
     }
     if body.amount > MAX_BRIDGE_AMOUNT {
         return BridgeResponse::<()>::error(
             actix_web::http::StatusCode::BAD_REQUEST,
-            &format!("Amount too large. Maximum bridge amount is {} EDGE per request.", MAX_BRIDGE_AMOUNT),
+            &format!(
+                "Amount too large. Maximum bridge amount is {} EDGE per request.",
+                MAX_BRIDGE_AMOUNT
+            ),
         );
     }
 
@@ -264,7 +276,10 @@ pub async fn bridge_lock(
     let net_amount = body.amount - fee;
 
     // Lock EDGE: transfer from user to bridge_vault
-    let request_id = format!("br_{}", uuid::Uuid::new_v4().to_string().replace("-", "")[..16].to_string());
+    let request_id = format!(
+        "br_{}",
+        uuid::Uuid::new_v4().to_string().replace("-", "")[..16].to_string()
+    );
     let tx_hash_edge: String;
 
     {
@@ -275,7 +290,10 @@ pub async fn bridge_lock(
         if balance < body.amount {
             return BridgeResponse::<()>::error(
                 actix_web::http::StatusCode::BAD_REQUEST,
-                &format!("Insufficient balance. Available: {} EDGE, Required: {} EDGE.", balance, body.amount),
+                &format!(
+                    "Insufficient balance. Available: {} EDGE, Required: {} EDGE.",
+                    balance, body.amount
+                ),
             );
         }
 
@@ -283,8 +301,10 @@ pub async fn bridge_lock(
         match chain.internal_transfer(&body.edge_address, BRIDGE_VAULT, body.amount) {
             Ok(hash) => {
                 tx_hash_edge = hash;
-                info!("Bridge lock: {} EDGE from {} to vault (fee: {}), request: {}",
-                    body.amount, body.edge_address, fee, request_id);
+                info!(
+                    "Bridge lock: {} EDGE from {} to vault (fee: {}), request: {}",
+                    body.amount, body.edge_address, fee, request_id
+                );
             }
             Err(e) => {
                 return BridgeResponse::<()>::error(
@@ -356,7 +376,7 @@ pub async fn bridge_complete(
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
         match sqlx::query(
             "UPDATE bridge_requests SET status = 'completed', tx_hash_evm = ?, admin_note = ?, \
-             completed_at = ? WHERE request_id = ? AND status = 'pending'"
+             completed_at = ? WHERE request_id = ? AND status = 'pending'",
         )
         .bind(&body.tx_hash_evm)
         .bind(&body.note)
@@ -372,7 +392,10 @@ pub async fn bridge_complete(
                         "Bridge request not found or not in pending status.",
                     );
                 }
-                info!("Bridge request {} completed with EVM tx: {}", body.request_id, body.tx_hash_evm);
+                info!(
+                    "Bridge request {} completed with EVM tx: {}",
+                    body.request_id, body.tx_hash_evm
+                );
             }
             Err(e) => {
                 return BridgeResponse::<()>::error(
@@ -409,7 +432,10 @@ pub async fn bridge_release(
         );
     }
 
-    let source_chain = body.source_chain.clone().unwrap_or_else(|| "bsc".to_string());
+    let source_chain = body
+        .source_chain
+        .clone()
+        .unwrap_or_else(|| "bsc".to_string());
 
     // Validate amount
     if body.amount < MIN_BRIDGE_AMOUNT {
@@ -421,7 +447,10 @@ pub async fn bridge_release(
 
     let fee = body.amount * BRIDGE_FEE_BPS / 10_000;
     let net_amount = body.amount - fee;
-    let request_id = format!("br_{}", uuid::Uuid::new_v4().to_string().replace("-", "")[..16].to_string());
+    let request_id = format!(
+        "br_{}",
+        uuid::Uuid::new_v4().to_string().replace("-", "")[..16].to_string()
+    );
     let tx_hash_edge: String;
 
     {
@@ -432,7 +461,10 @@ pub async fn bridge_release(
         if vault_balance < net_amount {
             return BridgeResponse::<()>::error(
                 actix_web::http::StatusCode::BAD_REQUEST,
-                &format!("Insufficient vault balance. Available: {} EDGE, Required: {} EDGE.", vault_balance, net_amount),
+                &format!(
+                    "Insufficient vault balance. Available: {} EDGE, Required: {} EDGE.",
+                    vault_balance, net_amount
+                ),
             );
         }
 
@@ -440,8 +472,10 @@ pub async fn bridge_release(
         match chain.internal_transfer(BRIDGE_VAULT, &body.edge_address, net_amount) {
             Ok(hash) => {
                 tx_hash_edge = hash;
-                info!("Bridge release: {} EDGE to {} from vault (fee: {}), request: {}",
-                    net_amount, body.edge_address, fee, request_id);
+                info!(
+                    "Bridge release: {} EDGE to {} from vault (fee: {}), request: {}",
+                    net_amount, body.edge_address, fee, request_id
+                );
             }
             Err(e) => {
                 return BridgeResponse::<()>::error(
@@ -544,7 +578,10 @@ pub async fn bridge_cancel(
     // Refund: transfer from bridge_vault back to user
     match chain.internal_transfer(BRIDGE_VAULT, &edge_address, amount) {
         Ok(_) => {
-            info!("Bridge cancel: refunded {} EDGE to {}, request: {}", amount, edge_address, body.request_id);
+            info!(
+                "Bridge cancel: refunded {} EDGE to {}, request: {}",
+                amount, edge_address, body.request_id
+            );
         }
         Err(e) => {
             return BridgeResponse::<()>::error(
@@ -556,9 +593,12 @@ pub async fn bridge_cancel(
 
     // Update status in OceanBase
     if let Some(ref ob) = chain.get_ob_storage() {
-        let note = body.reason.clone().unwrap_or_else(|| "Cancelled by admin".to_string());
+        let note = body
+            .reason
+            .clone()
+            .unwrap_or_else(|| "Cancelled by admin".to_string());
         let _ = sqlx::query(
-            "UPDATE bridge_requests SET status = 'cancelled', admin_note = ? WHERE request_id = ?"
+            "UPDATE bridge_requests SET status = 'cancelled', admin_note = ? WHERE request_id = ?",
         )
         .bind(&note)
         .bind(&body.request_id)
@@ -659,22 +699,25 @@ pub async fn bridge_history(
         match q.fetch_all(ob.pool()).await {
             Ok(rows) => {
                 use sqlx::Row;
-                let requests: Vec<serde_json::Value> = rows.iter().map(|row| {
-                    serde_json::json!({
-                        "request_id": row.get::<String, _>("request_id"),
-                        "direction": row.get::<String, _>("direction"),
-                        "target_chain": row.get::<String, _>("target_chain"),
-                        "edge_address": row.get::<String, _>("edge_address"),
-                        "evm_address": row.get::<String, _>("evm_address"),
-                        "amount": row.get::<u64, _>("amount"),
-                        "fee": row.get::<u64, _>("fee"),
-                        "status": row.get::<String, _>("status"),
-                        "tx_hash_edge": row.get::<Option<String>, _>("tx_hash_edge"),
-                        "tx_hash_evm": row.get::<Option<String>, _>("tx_hash_evm"),
-                        "created_at": row.get::<String, _>("created_at"),
-                        "completed_at": row.get::<Option<String>, _>("completed_at"),
+                let requests: Vec<serde_json::Value> = rows
+                    .iter()
+                    .map(|row| {
+                        serde_json::json!({
+                            "request_id": row.get::<String, _>("request_id"),
+                            "direction": row.get::<String, _>("direction"),
+                            "target_chain": row.get::<String, _>("target_chain"),
+                            "edge_address": row.get::<String, _>("edge_address"),
+                            "evm_address": row.get::<String, _>("evm_address"),
+                            "amount": row.get::<u64, _>("amount"),
+                            "fee": row.get::<u64, _>("fee"),
+                            "status": row.get::<String, _>("status"),
+                            "tx_hash_edge": row.get::<Option<String>, _>("tx_hash_edge"),
+                            "tx_hash_evm": row.get::<Option<String>, _>("tx_hash_evm"),
+                            "created_at": row.get::<String, _>("created_at"),
+                            "completed_at": row.get::<Option<String>, _>("completed_at"),
+                        })
                     })
-                }).collect();
+                    .collect();
 
                 return BridgeResponse::success(serde_json::json!({
                     "total": requests.len(),
@@ -697,9 +740,7 @@ pub async fn bridge_history(
 }
 
 /// GET /api/bridge/stats - Get bridge statistics
-pub async fn bridge_stats(
-    state: web::Data<BridgeState>,
-) -> impl Responder {
+pub async fn bridge_stats(state: web::Data<BridgeState>) -> impl Responder {
     let chain = state.blockchain.read().await;
     let vault_balance = chain.get_balance(BRIDGE_VAULT);
 
@@ -777,7 +818,7 @@ pub async fn bridge_get_request(
         match sqlx::query(
             "SELECT request_id, direction, target_chain, edge_address, evm_address, \
              amount, fee, status, tx_hash_edge, tx_hash_evm, admin_note, created_at, completed_at \
-             FROM bridge_requests WHERE request_id = ?"
+             FROM bridge_requests WHERE request_id = ?",
         )
         .bind(&request_id)
         .fetch_optional(ob.pool())
@@ -860,5 +901,8 @@ pub fn configure_bridge_routes(cfg: &mut web::ServiceConfig, bridge_state: web::
         .route("/api/bridge/pending", web::get().to(bridge_pending))
         .route("/api/bridge/history", web::get().to(bridge_history))
         .route("/api/bridge/stats", web::get().to(bridge_stats))
-        .route("/api/bridge/request/{request_id}", web::get().to(bridge_get_request));
+        .route(
+            "/api/bridge/request/{request_id}",
+            web::get().to(bridge_get_request),
+        );
 }

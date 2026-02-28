@@ -5,12 +5,12 @@
 
 #![allow(dead_code)]
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use log::info;
-use wasmtime::{Engine, Store, Module, Instance, Linker, Memory, MemoryType, Val, Caller};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use wasmtime::{Caller, Engine, Instance, Linker, Memory, MemoryType, Module, Store, Val};
 
 /// Gas costs for different operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,7 +69,11 @@ impl GasMeter {
     }
 
     pub fn with_costs(limit: u64, costs: GasCosts) -> Self {
-        GasMeter { limit, used: 0, costs }
+        GasMeter {
+            limit,
+            used: 0,
+            costs,
+        }
     }
 
     /// Consume gas, returns error if limit exceeded
@@ -304,7 +308,7 @@ impl WasmRuntime {
             .map_err(|e| WasmError::CompilationError(e.to_string()))?;
 
         // Generate contract address
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(wasm_code);
         hasher.update(owner.as_bytes());
@@ -340,11 +344,15 @@ impl WasmRuntime {
         args: &[Val],
         context: ExecutionContext,
     ) -> Result<ExecutionResult, WasmError> {
-        let contract = self.contracts.get(contract_address)
+        let contract = self
+            .contracts
+            .get(contract_address)
             .ok_or_else(|| WasmError::InvalidContract("Contract not found".to_string()))?;
 
         // Get contract storage
-        let storage = self.storage.get(contract_address)
+        let storage = self
+            .storage
+            .get(contract_address)
             .cloned()
             .unwrap_or_default();
 
@@ -364,16 +372,18 @@ impl WasmRuntime {
 
         // Create linker and add host functions
         let mut linker = Linker::new(&self.engine);
-        
+
         // Add host functions
         Self::add_host_functions(&mut linker)?;
 
         // Instantiate the module
-        let instance = linker.instantiate(&mut store, &contract.module)
+        let instance = linker
+            .instantiate(&mut store, &contract.module)
             .map_err(|e| WasmError::RuntimeError(e.to_string()))?;
 
         // Get the function
-        let func = instance.get_func(&mut store, function_name)
+        let func = instance
+            .get_func(&mut store, function_name)
             .ok_or_else(|| WasmError::FunctionNotFound(function_name.to_string()))?;
 
         // Call the function
@@ -387,7 +397,8 @@ impl WasmRuntime {
         let final_gas = host_env.gas_meter.lock().unwrap().used;
 
         // Update contract storage
-        self.storage.insert(contract_address.to_string(), final_storage.clone());
+        self.storage
+            .insert(contract_address.to_string(), final_storage.clone());
 
         // Convert storage to state changes
         let state_changes: HashMap<String, Vec<u8>> = final_storage
@@ -397,7 +408,8 @@ impl WasmRuntime {
 
         Ok(ExecutionResult {
             success: true,
-            return_data: results.first()
+            return_data: results
+                .first()
                 .map(|v| match v {
                     Val::I64(n) => n.to_le_bytes().to_vec(),
                     Val::I32(n) => n.to_le_bytes().to_vec(),
@@ -414,152 +426,205 @@ impl WasmRuntime {
     /// Add host functions to the linker
     fn add_host_functions(linker: &mut Linker<HostEnv>) -> Result<(), WasmError> {
         // storage_read(key_ptr, key_len, value_ptr) -> value_len
-        linker.func_wrap("env", "storage_read", |mut caller: Caller<'_, HostEnv>, key_ptr: i32, key_len: i32, value_ptr: i32| -> i32 {
-            let memory = match caller.get_export("memory") {
-                Some(wasmtime::Extern::Memory(mem)) => mem,
-                _ => return -1,
-            };
+        linker
+            .func_wrap(
+                "env",
+                "storage_read",
+                |mut caller: Caller<'_, HostEnv>,
+                 key_ptr: i32,
+                 key_len: i32,
+                 value_ptr: i32|
+                 -> i32 {
+                    let memory = match caller.get_export("memory") {
+                        Some(wasmtime::Extern::Memory(mem)) => mem,
+                        _ => return -1,
+                    };
 
-            // Read key from memory
-            let mut key = vec![0u8; key_len as usize];
-            if memory.read(&caller, key_ptr as usize, &mut key).is_err() {
-                return -1;
-            }
-
-            // Consume gas
-            {
-                let data = caller.data();
-                let mut gas = data.gas_meter.lock().unwrap();
-                if gas.consume_storage_read().is_err() {
-                    return -2; // Out of gas
-                }
-            }
-
-            // Read from storage
-            let value = {
-                let data = caller.data();
-                let storage = data.storage.lock().unwrap();
-                storage.get(&key).cloned()
-            };
-
-            match value {
-                Some(v) => {
-                    // Write value to memory
-                    if memory.write(&mut caller, value_ptr as usize, &v).is_err() {
+                    // Read key from memory
+                    let mut key = vec![0u8; key_len as usize];
+                    if memory.read(&caller, key_ptr as usize, &mut key).is_err() {
                         return -1;
                     }
-                    v.len() as i32
-                }
-                None => 0,
-            }
-        }).map_err(|e| WasmError::ImportError(e.to_string()))?;
+
+                    // Consume gas
+                    {
+                        let data = caller.data();
+                        let mut gas = data.gas_meter.lock().unwrap();
+                        if gas.consume_storage_read().is_err() {
+                            return -2; // Out of gas
+                        }
+                    }
+
+                    // Read from storage
+                    let value = {
+                        let data = caller.data();
+                        let storage = data.storage.lock().unwrap();
+                        storage.get(&key).cloned()
+                    };
+
+                    match value {
+                        Some(v) => {
+                            // Write value to memory
+                            if memory.write(&mut caller, value_ptr as usize, &v).is_err() {
+                                return -1;
+                            }
+                            v.len() as i32
+                        }
+                        None => 0,
+                    }
+                },
+            )
+            .map_err(|e| WasmError::ImportError(e.to_string()))?;
 
         // storage_write(key_ptr, key_len, value_ptr, value_len) -> success
-        linker.func_wrap("env", "storage_write", |mut caller: Caller<'_, HostEnv>, key_ptr: i32, key_len: i32, value_ptr: i32, value_len: i32| -> i32 {
-            let memory = match caller.get_export("memory") {
-                Some(wasmtime::Extern::Memory(mem)) => mem,
-                _ => return -1,
-            };
+        linker
+            .func_wrap(
+                "env",
+                "storage_write",
+                |mut caller: Caller<'_, HostEnv>,
+                 key_ptr: i32,
+                 key_len: i32,
+                 value_ptr: i32,
+                 value_len: i32|
+                 -> i32 {
+                    let memory = match caller.get_export("memory") {
+                        Some(wasmtime::Extern::Memory(mem)) => mem,
+                        _ => return -1,
+                    };
 
-            // Read key and value from memory
-            let mut key = vec![0u8; key_len as usize];
-            let mut value = vec![0u8; value_len as usize];
-            
-            if memory.read(&caller, key_ptr as usize, &mut key).is_err() {
-                return -1;
-            }
-            if memory.read(&caller, value_ptr as usize, &mut value).is_err() {
-                return -1;
-            }
+                    // Read key and value from memory
+                    let mut key = vec![0u8; key_len as usize];
+                    let mut value = vec![0u8; value_len as usize];
 
-            // Consume gas
-            {
-                let data = caller.data();
-                let mut gas = data.gas_meter.lock().unwrap();
-                if gas.consume_storage_write().is_err() {
-                    return -2; // Out of gas
-                }
-            }
+                    if memory.read(&caller, key_ptr as usize, &mut key).is_err() {
+                        return -1;
+                    }
+                    if memory
+                        .read(&caller, value_ptr as usize, &mut value)
+                        .is_err()
+                    {
+                        return -1;
+                    }
 
-            // Write to storage
-            {
-                let data = caller.data();
-                let mut storage = data.storage.lock().unwrap();
-                storage.insert(key, value);
-            }
+                    // Consume gas
+                    {
+                        let data = caller.data();
+                        let mut gas = data.gas_meter.lock().unwrap();
+                        if gas.consume_storage_write().is_err() {
+                            return -2; // Out of gas
+                        }
+                    }
 
-            1 // Success
-        }).map_err(|e| WasmError::ImportError(e.to_string()))?;
+                    // Write to storage
+                    {
+                        let data = caller.data();
+                        let mut storage = data.storage.lock().unwrap();
+                        storage.insert(key, value);
+                    }
+
+                    1 // Success
+                },
+            )
+            .map_err(|e| WasmError::ImportError(e.to_string()))?;
 
         // log(msg_ptr, msg_len)
-        linker.func_wrap("env", "log", |mut caller: Caller<'_, HostEnv>, msg_ptr: i32, msg_len: i32| {
-            let memory = match caller.get_export("memory") {
-                Some(wasmtime::Extern::Memory(mem)) => mem,
-                _ => return,
-            };
+        linker
+            .func_wrap(
+                "env",
+                "log",
+                |mut caller: Caller<'_, HostEnv>, msg_ptr: i32, msg_len: i32| {
+                    let memory = match caller.get_export("memory") {
+                        Some(wasmtime::Extern::Memory(mem)) => mem,
+                        _ => return,
+                    };
 
-            let mut msg = vec![0u8; msg_len as usize];
-            if memory.read(&caller, msg_ptr as usize, &mut msg).is_err() {
-                return;
-            }
+                    let mut msg = vec![0u8; msg_len as usize];
+                    if memory.read(&caller, msg_ptr as usize, &mut msg).is_err() {
+                        return;
+                    }
 
-            let data = caller.data();
-            
-            // Consume gas
-            {
-                let mut gas = data.gas_meter.lock().unwrap();
-                let log_cost = gas.costs.log;
-                let _ = gas.consume(log_cost);
-            }
+                    let data = caller.data();
 
-            // Add log
-            {
-                let mut logs = data.logs.lock().unwrap();
-                logs.push(ContractLog {
-                    contract: data.context.contract_address.clone(),
-                    topics: vec!["log".to_string()],
-                    data: msg,
-                });
-            }
-        }).map_err(|e| WasmError::ImportError(e.to_string()))?;
+                    // Consume gas
+                    {
+                        let mut gas = data.gas_meter.lock().unwrap();
+                        let log_cost = gas.costs.log;
+                        let _ = gas.consume(log_cost);
+                    }
+
+                    // Add log
+                    {
+                        let mut logs = data.logs.lock().unwrap();
+                        logs.push(ContractLog {
+                            contract: data.context.contract_address.clone(),
+                            topics: vec!["log".to_string()],
+                            data: msg,
+                        });
+                    }
+                },
+            )
+            .map_err(|e| WasmError::ImportError(e.to_string()))?;
 
         // get_caller(ptr) -> len
-        linker.func_wrap("env", "get_caller", |mut caller: Caller<'_, HostEnv>, ptr: i32| -> i32 {
-            let memory = match caller.get_export("memory") {
-                Some(wasmtime::Extern::Memory(mem)) => mem,
-                _ => return -1,
-            };
+        linker
+            .func_wrap(
+                "env",
+                "get_caller",
+                |mut caller: Caller<'_, HostEnv>, ptr: i32| -> i32 {
+                    let memory = match caller.get_export("memory") {
+                        Some(wasmtime::Extern::Memory(mem)) => mem,
+                        _ => return -1,
+                    };
 
-            let caller_addr = {
-                let data = caller.data();
-                data.context.caller.clone()
-            };
-            let caller_bytes = caller_addr.as_bytes();
-            
-            if memory.write(&mut caller, ptr as usize, caller_bytes).is_err() {
-                return -1;
-            }
+                    let caller_addr = {
+                        let data = caller.data();
+                        data.context.caller.clone()
+                    };
+                    let caller_bytes = caller_addr.as_bytes();
 
-            caller_bytes.len() as i32
-        }).map_err(|e| WasmError::ImportError(e.to_string()))?;
+                    if memory
+                        .write(&mut caller, ptr as usize, caller_bytes)
+                        .is_err()
+                    {
+                        return -1;
+                    }
+
+                    caller_bytes.len() as i32
+                },
+            )
+            .map_err(|e| WasmError::ImportError(e.to_string()))?;
 
         // get_block_height() -> u64
-        linker.func_wrap("env", "get_block_height", |caller: Caller<'_, HostEnv>| -> i64 {
-            let data = caller.data();
-            data.context.block_height as i64
-        }).map_err(|e| WasmError::ImportError(e.to_string()))?;
+        linker
+            .func_wrap(
+                "env",
+                "get_block_height",
+                |caller: Caller<'_, HostEnv>| -> i64 {
+                    let data = caller.data();
+                    data.context.block_height as i64
+                },
+            )
+            .map_err(|e| WasmError::ImportError(e.to_string()))?;
 
         // get_block_timestamp() -> i64
-        linker.func_wrap("env", "get_block_timestamp", |caller: Caller<'_, HostEnv>| -> i64 {
-            let data = caller.data();
-            data.context.block_timestamp
-        }).map_err(|e| WasmError::ImportError(e.to_string()))?;
+        linker
+            .func_wrap(
+                "env",
+                "get_block_timestamp",
+                |caller: Caller<'_, HostEnv>| -> i64 {
+                    let data = caller.data();
+                    data.context.block_timestamp
+                },
+            )
+            .map_err(|e| WasmError::ImportError(e.to_string()))?;
 
         // get_value() -> u64
-        linker.func_wrap("env", "get_value", |caller: Caller<'_, HostEnv>| -> i64 {
-            let data = caller.data();
-            data.context.value as i64
-        }).map_err(|e| WasmError::ImportError(e.to_string()))?;
+        linker
+            .func_wrap("env", "get_value", |caller: Caller<'_, HostEnv>| -> i64 {
+                let data = caller.data();
+                data.context.value as i64
+            })
+            .map_err(|e| WasmError::ImportError(e.to_string()))?;
 
         Ok(())
     }
@@ -576,12 +641,15 @@ impl WasmRuntime {
 
     /// List all contracts
     pub fn list_contracts(&self) -> Vec<ContractInfo> {
-        self.contracts.values().map(|c| ContractInfo {
-            address: c.address.clone(),
-            abi: c.abi.clone(),
-            code_hash: c.code_hash.clone(),
-            deployed_at: c.compiled_at,
-        }).collect()
+        self.contracts
+            .values()
+            .map(|c| ContractInfo {
+                address: c.address.clone(),
+                abi: c.abi.clone(),
+                code_hash: c.code_hash.clone(),
+                deployed_at: c.compiled_at,
+            })
+            .collect()
     }
 
     /// Get contract storage

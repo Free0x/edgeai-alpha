@@ -7,10 +7,10 @@
 //! - Slashing for misbehavior (double signing, downtime)
 //! - Reward distribution to validators and delegators
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
+use chrono::{DateTime, Duration, Utc};
 use log::{info, warn};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Staking configuration parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -463,7 +463,11 @@ impl StakingManager {
                 .validators
                 .get(validator_address)
                 .ok_or("Validator not found")?;
-            (validator.total_stake(), validator.delegated_stake, validator.self_stake)
+            (
+                validator.total_stake(),
+                validator.delegated_stake,
+                validator.self_stake,
+            )
         };
 
         // Determine slash percentage based on reason

@@ -78,9 +78,7 @@ pub enum ProposalType {
         action: ValidatorAction,
     },
     /// Free-form text proposal
-    Text {
-        content: String,
-    },
+    Text { content: String },
     /// Emergency action (requires higher threshold)
     Emergency {
         action: String,
@@ -256,7 +254,12 @@ impl Proposal {
         true
     }
 
-    pub fn cast_vote(&mut self, voter: String, option: VoteOption, voting_power: u128) -> Result<(), &'static str> {
+    pub fn cast_vote(
+        &mut self,
+        voter: String,
+        option: VoteOption,
+        voting_power: u128,
+    ) -> Result<(), &'static str> {
         if self.status != ProposalStatus::VotingPeriod {
             return Err("Proposal is not in voting period");
         }
@@ -501,7 +504,12 @@ impl GovernanceManager {
 
         // Execute based on proposal type
         match &proposal.proposal_type {
-            ProposalType::ParameterChange { module, parameter, new_value, .. } => {
+            ProposalType::ParameterChange {
+                module,
+                parameter,
+                new_value,
+                ..
+            } => {
                 // In a real implementation, this would update the parameter
                 log::info!(
                     "Executing parameter change: {}.{} = {}",
@@ -510,7 +518,12 @@ impl GovernanceManager {
                     new_value
                 );
             }
-            ProposalType::SoftwareUpgrade { name, version, upgrade_height, .. } => {
+            ProposalType::SoftwareUpgrade {
+                name,
+                version,
+                upgrade_height,
+                ..
+            } => {
                 log::info!(
                     "Scheduling upgrade {} v{} at height {}",
                     name,
@@ -518,13 +531,12 @@ impl GovernanceManager {
                     upgrade_height
                 );
             }
-            ProposalType::TreasurySpend { recipient, amount, reason } => {
-                log::info!(
-                    "Treasury spend: {} to {} for {}",
-                    amount,
-                    recipient,
-                    reason
-                );
+            ProposalType::TreasurySpend {
+                recipient,
+                amount,
+                reason,
+            } => {
+                log::info!("Treasury spend: {} to {} for {}", amount, recipient, reason);
             }
             ProposalType::ValidatorChange { validator, action } => {
                 log::info!("Validator change: {:?} for {}", action, validator);
@@ -532,7 +544,10 @@ impl GovernanceManager {
             ProposalType::Text { content } => {
                 log::info!("Text proposal executed: {}", content);
             }
-            ProposalType::Emergency { action, justification } => {
+            ProposalType::Emergency {
+                action,
+                justification,
+            } => {
                 log::info!("Emergency action: {} - {}", action, justification);
             }
         }
@@ -548,7 +563,9 @@ impl GovernanceManager {
             .filter(|p| {
                 matches!(
                     p.status,
-                    ProposalStatus::DepositPeriod | ProposalStatus::VotingPeriod | ProposalStatus::Passed
+                    ProposalStatus::DepositPeriod
+                        | ProposalStatus::VotingPeriod
+                        | ProposalStatus::Passed
                 )
             })
             .collect()
@@ -577,9 +594,7 @@ impl GovernanceManager {
             .as_secs();
 
         for proposal in self.proposals.values_mut() {
-            if proposal.status == ProposalStatus::DepositPeriod
-                && now > proposal.deposit_end_time
-            {
+            if proposal.status == ProposalStatus::DepositPeriod && now > proposal.deposit_end_time {
                 proposal.status = ProposalStatus::Expired;
             }
         }
@@ -601,12 +616,7 @@ impl GovernanceManager {
         let passed_proposals = self
             .proposals
             .values()
-            .filter(|p| {
-                matches!(
-                    p.status,
-                    ProposalStatus::Passed | ProposalStatus::Executed
-                )
-            })
+            .filter(|p| matches!(p.status, ProposalStatus::Passed | ProposalStatus::Executed))
             .count();
         let rejected_proposals = self
             .proposals
@@ -650,12 +660,14 @@ mod tests {
     #[test]
     fn test_create_proposal() {
         let mut gov = GovernanceManager::new(GovernanceConfig::default());
-        
+
         let result = gov.create_proposal(
             "0x1234".to_string(),
             "Test Proposal".to_string(),
             "This is a test proposal".to_string(),
-            ProposalType::Text { content: "Test content".to_string() },
+            ProposalType::Text {
+                content: "Test content".to_string(),
+            },
             10_000_000_000_000_000_000_000, // 10,000 EDGE
         );
 

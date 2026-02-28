@@ -3,11 +3,11 @@
 //! Provides in-memory caching for frequently accessed API endpoints
 //! to reduce database queries and improve response times.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use serde::{Serialize, Deserialize};
 
 /// Cache entry with expiration
 #[derive(Clone)]
@@ -66,12 +66,12 @@ impl<T: Clone + Send + Sync> ApiCache<T> {
     /// Set cache value with custom TTL
     pub async fn set_with_ttl(&self, key: String, value: T, ttl: Duration) {
         let mut entries = self.entries.write().await;
-        
+
         // Evict expired entries if cache is full
         if entries.len() >= self.max_entries {
             entries.retain(|_, v| !v.is_expired());
         }
-        
+
         // If still full, remove oldest entry
         if entries.len() >= self.max_entries {
             if let Some(oldest_key) = entries
@@ -82,7 +82,7 @@ impl<T: Clone + Send + Sync> ApiCache<T> {
                 entries.remove(&oldest_key);
             }
         }
-        
+
         entries.insert(key, CacheEntry::new(value, ttl));
     }
 
@@ -171,12 +171,12 @@ mod tests {
     #[tokio::test]
     async fn test_cache_basic() {
         let cache: ApiCache<String> = ApiCache::new(60, 100);
-        
+
         cache.set("key1".to_string(), "value1".to_string()).await;
-        
+
         let result = cache.get("key1").await;
         assert_eq!(result, Some("value1".to_string()));
-        
+
         let missing = cache.get("key2").await;
         assert_eq!(missing, None);
     }
@@ -184,13 +184,13 @@ mod tests {
     #[tokio::test]
     async fn test_cache_invalidation() {
         let cache: ApiCache<String> = ApiCache::new(60, 100);
-        
+
         cache.set("test:1".to_string(), "value1".to_string()).await;
         cache.set("test:2".to_string(), "value2".to_string()).await;
         cache.set("other:1".to_string(), "value3".to_string()).await;
-        
+
         cache.invalidate_prefix("test:").await;
-        
+
         assert_eq!(cache.get("test:1").await, None);
         assert_eq!(cache.get("test:2").await, None);
         assert_eq!(cache.get("other:1").await, Some("value3".to_string()));

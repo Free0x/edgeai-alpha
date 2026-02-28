@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::api::auth::{SignedRequest, AuthData, verify_signed_request};
+use crate::api::auth::{verify_signed_request, AuthData, SignedRequest};
 use crate::consensus::governance::{
-    GovernanceManager, GovernanceStats, Proposal, ProposalStatus, ProposalType,
-    ValidatorAction, VoteOption, VoteTally,
+    GovernanceManager, GovernanceStats, Proposal, ProposalStatus, ProposalType, ValidatorAction,
+    VoteOption, VoteTally,
 };
 
 /// Shared governance state
@@ -320,7 +320,7 @@ pub async fn get_proposal(
 }
 
 /// Create a new proposal (requires signature authentication)
-/// 
+///
 /// Request body must be wrapped in SignedRequest with auth data
 pub async fn create_proposal(
     governance: web::Data<GovernanceState>,
@@ -334,7 +334,7 @@ pub async fn create_proposal(
         Some(&body.data.proposer),
         300, // 5 minute expiry
     ) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(response) => return response,
     };
 
@@ -397,7 +397,7 @@ pub async fn add_deposit(
 }
 
 /// Vote on a proposal (requires signature authentication)
-/// 
+///
 /// Request body must be wrapped in SignedRequest with auth data
 pub async fn vote_on_proposal(
     governance: web::Data<GovernanceState>,
@@ -412,7 +412,7 @@ pub async fn vote_on_proposal(
         Some(&body.data.voter),
         300, // 5 minute expiry
     ) {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(response) => return response,
     };
 
@@ -588,7 +588,10 @@ pub fn configure_governance_routes(cfg: &mut web::ServiceConfig) {
             .route("/proposals/{id}", web::get().to(get_proposal))
             .route("/proposals/{id}/deposit", web::post().to(add_deposit))
             .route("/proposals/{id}/vote", web::post().to(vote_on_proposal))
-            .route("/proposals/{id}/vote/demo", web::post().to(vote_on_proposal_demo))
+            .route(
+                "/proposals/{id}/vote/demo",
+                web::post().to(vote_on_proposal_demo),
+            )
             .route("/proposals/{id}/votes", web::get().to(get_proposal_votes)),
     );
 }

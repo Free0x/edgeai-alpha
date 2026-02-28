@@ -2,10 +2,10 @@
 //!
 //! Exposes blockchain and system metrics in Prometheus format for monitoring.
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::time::Instant;
 use std::sync::RwLock;
-use serde::{Serialize, Deserialize};
+use std::time::Instant;
 
 /// Prometheus metric types
 #[derive(Clone)]
@@ -85,7 +85,10 @@ impl PrometheusRegistry {
             if let Some(v) = values.iter_mut().find(|v| v.labels == labels) {
                 v.value += delta;
             } else {
-                values.push(MetricValue { labels, value: delta });
+                values.push(MetricValue {
+                    labels,
+                    value: delta,
+                });
             }
         }
     }
@@ -99,14 +102,19 @@ impl PrometheusRegistry {
             // HELP line
             output.push_str(&format!("# HELP {} {}\n", def.name, def.help));
             // TYPE line
-            output.push_str(&format!("# TYPE {} {}\n", def.name, def.metric_type.as_str()));
-            
+            output.push_str(&format!(
+                "# TYPE {} {}\n",
+                def.name,
+                def.metric_type.as_str()
+            ));
+
             // Metric values
             for value in values {
                 if value.labels.is_empty() {
                     output.push_str(&format!("{} {}\n", def.name, value.value));
                 } else {
-                    let labels: Vec<String> = value.labels
+                    let labels: Vec<String> = value
+                        .labels
                         .iter()
                         .map(|(k, v)| format!("{}=\"{}\"", k, v))
                         .collect();
@@ -138,7 +146,7 @@ pub struct BlockchainMetrics {
 impl BlockchainMetrics {
     pub fn new() -> Self {
         let registry = Arc::new(PrometheusRegistry::new());
-        
+
         // Register blockchain metrics
         let metrics = vec![
             MetricDef {
@@ -260,10 +268,12 @@ impl BlockchainMetrics {
 
     /// Update blockchain metrics
     pub fn update_chain_stats(&self, height: u64, total_tx: u64, tps: f64, entropy: f64) {
-        self.registry.set_gauge("edgeai_block_height", height as f64, vec![]);
+        self.registry
+            .set_gauge("edgeai_block_height", height as f64, vec![]);
         self.registry.set_gauge("edgeai_tps", tps, vec![]);
-        self.registry.set_gauge("edgeai_network_entropy", entropy, vec![]);
-        
+        self.registry
+            .set_gauge("edgeai_network_entropy", entropy, vec![]);
+
         // Update transaction counter
         self.registry.set_gauge(
             "edgeai_transactions_total",
@@ -274,18 +284,22 @@ impl BlockchainMetrics {
 
     /// Update validator metrics
     pub fn update_validator_stats(&self, active_count: u64, total_stake: u64) {
-        self.registry.set_gauge("edgeai_active_validators", active_count as f64, vec![]);
-        self.registry.set_gauge("edgeai_total_stake", total_stake as f64, vec![]);
+        self.registry
+            .set_gauge("edgeai_active_validators", active_count as f64, vec![]);
+        self.registry
+            .set_gauge("edgeai_total_stake", total_stake as f64, vec![]);
     }
 
     /// Update mempool metrics
     pub fn update_mempool(&self, size: usize) {
-        self.registry.set_gauge("edgeai_mempool_size", size as f64, vec![]);
+        self.registry
+            .set_gauge("edgeai_mempool_size", size as f64, vec![]);
     }
 
     /// Update peer count
     pub fn update_peers(&self, count: usize) {
-        self.registry.set_gauge("edgeai_peer_count", count as f64, vec![]);
+        self.registry
+            .set_gauge("edgeai_peer_count", count as f64, vec![]);
     }
 
     /// Record API request
@@ -335,7 +349,8 @@ impl BlockchainMetrics {
 
     /// Update security metrics
     pub fn update_security(&self, blocked_ips: usize, rate_limit_hits: u64) {
-        self.registry.set_gauge("edgeai_blocked_ips", blocked_ips as f64, vec![]);
+        self.registry
+            .set_gauge("edgeai_blocked_ips", blocked_ips as f64, vec![]);
         self.registry.set_gauge(
             "edgeai_rate_limit_hits_total",
             rate_limit_hits as f64,
@@ -422,7 +437,7 @@ mod tests {
     fn test_prometheus_export() {
         let metrics = BlockchainMetrics::new();
         metrics.update_chain_stats(1000, 50000, 15.5, 100.0);
-        
+
         let output = metrics.export();
         assert!(output.contains("edgeai_block_height"));
         assert!(output.contains("1000"));

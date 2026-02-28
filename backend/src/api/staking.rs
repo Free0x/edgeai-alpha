@@ -6,15 +6,13 @@
 #![allow(dead_code)]
 
 use actix_web::{web, HttpResponse, Responder};
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use log::info;
 
-use crate::consensus::{
-    StakingManager, StakingConfig, ValidatorDescription, SlashReason,
-};
 use super::rest::ApiResponse;
+use crate::consensus::{SlashReason, StakingConfig, StakingManager, ValidatorDescription};
 
 /// Staking state (shared across handlers)
 pub struct StakingState {
@@ -240,7 +238,10 @@ pub async fn register_validator(
         description,
     ) {
         Ok(()) => {
-            info!("Validator {} registered via API", &req.address[..8.min(req.address.len())]);
+            info!(
+                "Validator {} registered via API",
+                &req.address[..8.min(req.address.len())]
+            );
             HttpResponse::Ok().json(ApiResponse {
                 success: true,
                 data: Some("Validator registered successfully"),
@@ -351,7 +352,10 @@ pub async fn unjail(
 
     match manager.unjail(&req.validator) {
         Ok(()) => {
-            info!("Validator {} unjailed via API", &req.validator[..8.min(req.validator.len())]);
+            info!(
+                "Validator {} unjailed via API",
+                &req.validator[..8.min(req.validator.len())]
+            );
             HttpResponse::Ok().json(ApiResponse {
                 success: true,
                 data: Some("Validator unjailed successfully"),

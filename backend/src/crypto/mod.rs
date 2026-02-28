@@ -6,4 +6,4 @@
 pub mod wallet;
 
 // Core crypto exports - only export what's actually used
-pub use wallet::{Wallet, WalletError, verify_signature, address_from_public_key};
+pub use wallet::{address_from_public_key, verify_signature, Wallet, WalletError};

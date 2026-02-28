@@ -1,5 +1,5 @@
 //! EdgeAI Blockchain - libp2p Network Layer
-//! 
+//!
 //! This module implements the P2P networking layer using libp2p,
 //! providing node discovery, gossip-based message propagation,
 //! and peer management.
@@ -15,14 +15,13 @@ use libp2p::{
     gossipsub::{self, IdentTopic, MessageAuthenticity, ValidationMode},
     identify,
     kad::{self, store::MemoryStore},
-    mdns,
-    noise,
+    mdns, noise,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Swarm,
 };
-use tokio::sync::mpsc;
-use log::{info, debug, warn, error};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 
 use crate::blockchain::{Block, Transaction};
 
@@ -91,8 +90,8 @@ pub struct CompactBlock {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GossipMessage {
     Transaction(Transaction),
-    Block(Block),  // Full block (for backward compatibility)
-    CompactBlock(CompactBlock),  // Compact block announcement
+    Block(Block),               // Full block (for backward compatibility)
+    CompactBlock(CompactBlock), // Compact block announcement
     Contribution(ContributionMessage),
 }
 
@@ -149,32 +148,41 @@ impl P2PNetwork {
     /// Create a new P2P network instance
     pub fn new(
         config: NetworkConfig,
-    ) -> Result<(Self, mpsc::Sender<NetworkCommand>, mpsc::Receiver<NetworkEvent>), Box<dyn std::error::Error>> {
+    ) -> Result<
+        (
+            Self,
+            mpsc::Sender<NetworkCommand>,
+            mpsc::Receiver<NetworkEvent>,
+        ),
+        Box<dyn std::error::Error>,
+    > {
         // Generate a random keypair for this node
         let local_key = libp2p::identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
-        
+
         info!("Local peer ID: {}", local_peer_id);
-        
+
         // Create channels for communication with application
         let (event_tx, event_rx) = mpsc::channel(1000);
         let (command_tx, command_rx) = mpsc::channel(1000);
-        
+
         let network = Self {
             local_peer_id,
             event_tx,
             command_rx,
             config,
         };
-        
+
         Ok((network, command_tx, event_rx))
     }
-    
+
     /// Build the libp2p swarm
-    fn build_swarm(&self) -> Result<Swarm<EdgeAIBehaviour>, Box<dyn std::error::Error + Send + Sync>> {
+    fn build_swarm(
+        &self,
+    ) -> Result<Swarm<EdgeAIBehaviour>, Box<dyn std::error::Error + Send + Sync>> {
         let local_key = libp2p::identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
-        
+
         // Configure gossipsub with optimized settings
         let gossipsub_config = gossipsub::ConfigBuilder::default()
             .heartbeat_interval(Duration::from_secs(1))
@@ -187,32 +195,25 @@ impl P2PNetwork {
             })
             .build()
             .map_err(|e| format!("Failed to build gossipsub config: {}", e))?;
-        
+
         let gossipsub = gossipsub::Behaviour::new(
             MessageAuthenticity::Signed(local_key.clone()),
             gossipsub_config,
-        ).map_err(|e| format!("Failed to create gossipsub: {}", e))?;
-        
+        )
+        .map_err(|e| format!("Failed to create gossipsub: {}", e))?;
+
         // Configure Kademlia
-        let kademlia = kad::Behaviour::new(
-            local_peer_id,
-            MemoryStore::new(local_peer_id),
-        );
-        
+        let kademlia = kad::Behaviour::new(local_peer_id, MemoryStore::new(local_peer_id));
+
         // Configure mDNS
-        let mdns = mdns::tokio::Behaviour::new(
-            mdns::Config::default(),
-            local_peer_id,
-        )?;
-        
+        let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)?;
+
         // Configure Identify
-        let identify = identify::Behaviour::new(
-            identify::Config::new(
-                "/edgeai/1.0.0".to_string(),
-                local_key.public(),
-            )
-        );
-        
+        let identify = identify::Behaviour::new(identify::Config::new(
+            "/edgeai/1.0.0".to_string(),
+            local_key.public(),
+        ));
+
         // Create the combined behaviour
         let behaviour = EdgeAIBehaviour {
             gossipsub,
@@ -220,7 +221,7 @@ impl P2PNetwork {
             mdns,
             identify,
         };
-        
+
         // Build the swarm
         let swarm = libp2p::SwarmBuilder::with_existing_identity(local_key)
             .with_tokio()
@@ -232,29 +233,33 @@ impl P2PNetwork {
             .with_behaviour(|_| behaviour)?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
-        
+
         Ok(swarm)
     }
-    
+
     /// Run the P2P network event loop
     pub async fn run(mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut swarm = self.build_swarm()?;
-        
+
         // Subscribe to gossip topics
         let tx_topic = IdentTopic::new(topics::TRANSACTIONS);
         let block_topic = IdentTopic::new(topics::BLOCKS);
         let contribution_topic = IdentTopic::new(topics::CONTRIBUTIONS);
-        
+
         swarm.behaviour_mut().gossipsub.subscribe(&tx_topic)?;
         swarm.behaviour_mut().gossipsub.subscribe(&block_topic)?;
-        swarm.behaviour_mut().gossipsub.subscribe(&contribution_topic)?;
-        
+        swarm
+            .behaviour_mut()
+            .gossipsub
+            .subscribe(&contribution_topic)?;
+
         // Start listening
-        let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", self.config.listen_port).parse()?;
+        let listen_addr: Multiaddr =
+            format!("/ip4/0.0.0.0/tcp/{}", self.config.listen_port).parse()?;
         swarm.listen_on(listen_addr)?;
-        
+
         info!("P2P network started on port {}", self.config.listen_port);
-        
+
         // Connect to bootstrap nodes
         for addr_str in &self.config.bootstrap_nodes {
             if let Ok(addr) = addr_str.parse::<Multiaddr>() {
@@ -264,10 +269,10 @@ impl P2PNetwork {
                 }
             }
         }
-        
+
         // Notify that network is ready
         let _ = self.event_tx.send(NetworkEvent::Ready).await;
-        
+
         // Main event loop
         loop {
             tokio::select! {
@@ -275,7 +280,7 @@ impl P2PNetwork {
                 event = swarm.select_next_some() => {
                     self.handle_swarm_event(&mut swarm, event).await;
                 }
-                
+
                 // Handle commands from application
                 Some(command) = self.command_rx.recv() => {
                     self.handle_command(&mut swarm, command).await;
@@ -283,7 +288,7 @@ impl P2PNetwork {
             }
         }
     }
-    
+
     /// Handle swarm events
     async fn handle_swarm_event(
         &self,
@@ -296,8 +301,11 @@ impl P2PNetwork {
                 message_id,
                 message,
             })) => {
-                debug!("Received gossip message {} from {}", message_id, propagation_source);
-                
+                debug!(
+                    "Received gossip message {} from {}",
+                    message_id, propagation_source
+                );
+
                 // Deserialize and handle the message
                 if let Ok(gossip_msg) = serde_json::from_slice::<GossipMessage>(&message.data) {
                     match gossip_msg {
@@ -310,16 +318,22 @@ impl P2PNetwork {
                         GossipMessage::CompactBlock(compact) => {
                             // CompactBlock is for announcement only
                             // Peers can request full block if needed
-                            debug!("Received compact block #{} with {} txs", compact.index, compact.tx_count);
+                            debug!(
+                                "Received compact block #{} with {} txs",
+                                compact.index, compact.tx_count
+                            );
                             // For now, we just log it - full block sync would be implemented separately
                         }
                         GossipMessage::Contribution(contrib) => {
-                            let _ = self.event_tx.send(NetworkEvent::NewContribution(contrib)).await;
+                            let _ = self
+                                .event_tx
+                                .send(NetworkEvent::NewContribution(contrib))
+                                .await;
                         }
                     }
                 }
             }
-            
+
             SwarmEvent::Behaviour(EdgeAIBehaviourEvent::Mdns(mdns::Event::Discovered(peers))) => {
                 for (peer_id, addr) in peers {
                     info!("mDNS discovered peer: {} at {}", peer_id, addr);
@@ -327,45 +341,57 @@ impl P2PNetwork {
                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                 }
             }
-            
+
             SwarmEvent::Behaviour(EdgeAIBehaviourEvent::Mdns(mdns::Event::Expired(peers))) => {
                 for (peer_id, _addr) in peers {
                     debug!("mDNS peer expired: {}", peer_id);
-                    swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+                    swarm
+                        .behaviour_mut()
+                        .gossipsub
+                        .remove_explicit_peer(&peer_id);
                 }
             }
-            
+
             SwarmEvent::Behaviour(EdgeAIBehaviourEvent::Identify(identify::Event::Received {
                 peer_id,
                 info,
                 ..
             })) => {
-                info!("Identified peer {}: {} ({})", peer_id, info.protocol_version, info.agent_version);
-                
+                info!(
+                    "Identified peer {}: {} ({})",
+                    peer_id, info.protocol_version, info.agent_version
+                );
+
                 // Add peer addresses to Kademlia
                 for addr in info.listen_addrs {
                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
                 }
             }
-            
+
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 info!("Connection established with peer: {}", peer_id);
-                let _ = self.event_tx.send(NetworkEvent::PeerConnected(peer_id)).await;
+                let _ = self
+                    .event_tx
+                    .send(NetworkEvent::PeerConnected(peer_id))
+                    .await;
             }
-            
+
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 info!("Connection closed with peer: {}", peer_id);
-                let _ = self.event_tx.send(NetworkEvent::PeerDisconnected(peer_id)).await;
+                let _ = self
+                    .event_tx
+                    .send(NetworkEvent::PeerDisconnected(peer_id))
+                    .await;
             }
-            
+
             SwarmEvent::NewListenAddr { address, .. } => {
                 info!("Listening on {}", address);
             }
-            
+
             _ => {}
         }
     }
-    
+
     /// Handle commands from application
     async fn handle_command(&self, swarm: &mut Swarm<EdgeAIBehaviour>, command: NetworkCommand) {
         match command {
@@ -378,7 +404,7 @@ impl P2PNetwork {
                     }
                 }
             }
-            
+
             NetworkCommand::BroadcastBlock(block) => {
                 // Create a compact block announcement (header + tx hashes only)
                 // Full block can be requested by peers if needed
@@ -389,7 +415,11 @@ impl P2PNetwork {
                     validator: block.validator.clone(),
                     timestamp: block.header.timestamp.to_string(),
                     tx_count: block.transactions.len() as u32,
-                    tx_hashes: block.transactions.iter().map(|tx| tx.hash.clone()).collect(),
+                    tx_hashes: block
+                        .transactions
+                        .iter()
+                        .map(|tx| tx.hash.clone())
+                        .collect(),
                 };
                 let msg = GossipMessage::CompactBlock(compact_block);
                 if let Ok(data) = serde_json::to_vec(&msg) {
@@ -397,11 +427,15 @@ impl P2PNetwork {
                     if let Err(e) = swarm.behaviour_mut().gossipsub.publish(topic, data) {
                         warn!("Failed to broadcast block: {}", e);
                     } else {
-                        debug!("Broadcast compact block #{} ({} tx hashes)", block.index, block.transactions.len());
+                        debug!(
+                            "Broadcast compact block #{} ({} tx hashes)",
+                            block.index,
+                            block.transactions.len()
+                        );
                     }
                 }
             }
-            
+
             NetworkCommand::BroadcastContribution(contrib) => {
                 let msg = GossipMessage::Contribution(contrib);
                 if let Ok(data) = serde_json::to_vec(&msg) {
@@ -411,14 +445,14 @@ impl P2PNetwork {
                     }
                 }
             }
-            
+
             NetworkCommand::ConnectPeer(addr) => {
                 info!("Connecting to peer: {}", addr);
                 if let Err(e) = swarm.dial(addr.clone()) {
                     warn!("Failed to dial peer {}: {}", addr, e);
                 }
             }
-            
+
             NetworkCommand::GetPeerCount => {
                 let count = swarm.connected_peers().count();
                 debug!("Current peer count: {}", count);
@@ -430,23 +464,24 @@ impl P2PNetwork {
 /// Helper function to create and start the P2P network
 pub async fn start_p2p_network(
     config: NetworkConfig,
-) -> Result<(mpsc::Sender<NetworkCommand>, mpsc::Receiver<NetworkEvent>), Box<dyn std::error::Error>> {
+) -> Result<(mpsc::Sender<NetworkCommand>, mpsc::Receiver<NetworkEvent>), Box<dyn std::error::Error>>
+{
     let (network, command_tx, event_rx) = P2PNetwork::new(config)?;
-    
+
     // Spawn the network event loop
     tokio::spawn(async move {
         if let Err(e) = network.run().await {
             error!("P2P network error: {}", e);
         }
     });
-    
+
     Ok((command_tx, event_rx))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_network_creation() {
         let config = NetworkConfig::default();

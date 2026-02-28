@@ -1,5 +1,5 @@
-use chrono::{Utc, Duration};
 use crate::iot::types::{IoTSector, IoTTransaction, Location};
+use chrono::{Duration, Utc};
 
 /// 线性同余生成器 (LCG) - 确定性随机数生成
 pub struct LCG {
@@ -42,7 +42,10 @@ impl IoTGenerator {
                     0 => {
                         let density = ["low", "medium", "high"][rng.next_int(3)];
                         let speed = rng.next_int(80);
-                        format!(r#"{{"traffic_density": "{}", "avg_speed": {}kmh}}"#, density, speed)
+                        format!(
+                            r#"{{"traffic_density": "{}", "avg_speed": {}kmh}}"#,
+                            density, speed
+                        )
                     }
                     1 => {
                         let co2 = 350 + rng.next_int(150);
@@ -121,7 +124,10 @@ impl IoTGenerator {
                         let lat = rng.next() * 180.0 - 90.0;
                         let lng = rng.next() * 360.0 - 180.0;
                         let speed = rng.next_int(100);
-                        format!(r#"{{"lat": {:.4}, "lng": {:.4}, "speed": "{}kmh"}}"#, lat, lng, speed)
+                        format!(
+                            r#"{{"lat": {:.4}, "lng": {:.4}, "speed": "{}kmh"}}"#,
+                            lat, lng, speed
+                        )
                     }
                     1 => {
                         let temp = -20 + rng.next_int(30) as i32;
@@ -145,7 +151,10 @@ impl IoTGenerator {
                     1 => {
                         let output = rng.next() * 10.0;
                         let efficiency = 80 + rng.next_int(20);
-                        format!(r#"{{"output_kw": {:.2}, "efficiency": "{}%"}}"#, output, efficiency)
+                        format!(
+                            r#"{{"output_kw": {:.2}, "efficiency": "{}%"}}"#,
+                            output, efficiency
+                        )
                     }
                     _ => {
                         let charge = rng.next_int(100);
@@ -246,7 +255,7 @@ mod tests {
     fn test_generate_transaction() {
         let generator = IoTGenerator::new();
         let tx = generator.generate_transaction(0);
-        
+
         assert!(!tx.hash.is_empty());
         assert!(!tx.sector.is_empty());
         assert!(!tx.device_type.is_empty());
@@ -258,7 +267,7 @@ mod tests {
         let generator = IoTGenerator::new();
         let tx1 = generator.generate_transaction(42);
         let tx2 = generator.generate_transaction(42);
-        
+
         assert_eq!(tx1.hash, tx2.hash);
         assert_eq!(tx1.sector, tx2.sector);
         assert_eq!(tx1.device_type, tx2.device_type);

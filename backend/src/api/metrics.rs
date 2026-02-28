@@ -3,12 +3,12 @@
 //! Collects and exposes performance metrics for monitoring.
 //! Compatible with Prometheus format.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use serde::{Serialize, Deserialize};
 
 /// Counter metric (monotonically increasing)
 #[derive(Default)]
@@ -65,7 +65,7 @@ impl Gauge {
 /// Histogram for tracking distributions
 pub struct Histogram {
     buckets: Vec<(f64, AtomicU64)>, // (upper bound, count)
-    sum: AtomicU64,                  // Sum of all values (as micros)
+    sum: AtomicU64,                 // Sum of all values (as micros)
     count: AtomicU64,
 }
 
@@ -107,8 +107,9 @@ impl Histogram {
         let count = self.count.load(Ordering::Relaxed);
         let sum_micros = self.sum.load(Ordering::Relaxed);
         let sum = sum_micros as f64 / 1_000_000.0;
-        
-        let buckets: Vec<(f64, u64)> = self.buckets
+
+        let buckets: Vec<(f64, u64)> = self
+            .buckets
             .iter()
             .map(|(bound, count)| (*bound, count.load(Ordering::Relaxed)))
             .collect();
@@ -158,26 +159,26 @@ pub struct Metrics {
     pub http_request_duration: Arc<Histogram>,
     pub http_requests_by_path: RwLock<HashMap<String, Counter>>,
     pub http_errors_total: Counter,
-    
+
     // Blockchain metrics
     pub blocks_produced: Counter,
     pub transactions_processed: Counter,
     pub pending_transactions: Gauge,
     pub chain_height: Gauge,
     pub active_accounts: Gauge,
-    
+
     // P2P metrics
     pub p2p_peers_connected: Gauge,
     pub p2p_messages_sent: Counter,
     pub p2p_messages_received: Counter,
     pub p2p_bytes_sent: Counter,
     pub p2p_bytes_received: Counter,
-    
+
     // Cache metrics
     pub cache_hits: Counter,
     pub cache_misses: Counter,
     pub cache_size: Gauge,
-    
+
     // System metrics
     pub start_time: Instant,
 }
@@ -190,23 +191,23 @@ impl Metrics {
             http_request_duration: Arc::new(Histogram::http_latency_buckets()),
             http_requests_by_path: RwLock::new(HashMap::new()),
             http_errors_total: Counter::new(),
-            
+
             blocks_produced: Counter::new(),
             transactions_processed: Counter::new(),
             pending_transactions: Gauge::new(),
             chain_height: Gauge::new(),
             active_accounts: Gauge::new(),
-            
+
             p2p_peers_connected: Gauge::new(),
             p2p_messages_sent: Counter::new(),
             p2p_messages_received: Counter::new(),
             p2p_bytes_sent: Counter::new(),
             p2p_bytes_received: Counter::new(),
-            
+
             cache_hits: Counter::new(),
             cache_misses: Counter::new(),
             cache_size: Gauge::new(),
-            
+
             start_time: Instant::now(),
         }
     }
@@ -214,7 +215,7 @@ impl Metrics {
     /// Record an HTTP request
     pub async fn record_request(&self, path: &str) {
         self.http_requests_total.inc();
-        
+
         let mut by_path = self.http_requests_by_path.write().await;
         by_path
             .entry(path.to_string())
@@ -242,7 +243,7 @@ impl Metrics {
     /// Export metrics in Prometheus format
     pub async fn export_prometheus(&self) -> String {
         let mut output = String::new();
-        
+
         // HTTP metrics
         output.push_str(&format!(
             "# HELP edgeai_http_requests_total Total HTTP requests\n\
@@ -250,21 +251,21 @@ impl Metrics {
              edgeai_http_requests_total {}\n\n",
             self.http_requests_total.get()
         ));
-        
+
         output.push_str(&format!(
             "# HELP edgeai_http_requests_in_flight Current HTTP requests being processed\n\
              # TYPE edgeai_http_requests_in_flight gauge\n\
              edgeai_http_requests_in_flight {}\n\n",
             self.http_requests_in_flight.get()
         ));
-        
+
         output.push_str(&format!(
             "# HELP edgeai_http_errors_total Total HTTP errors\n\
              # TYPE edgeai_http_errors_total counter\n\
              edgeai_http_errors_total {}\n\n",
             self.http_errors_total.get()
         ));
-        
+
         // Blockchain metrics
         output.push_str(&format!(
             "# HELP edgeai_blocks_produced_total Total blocks produced\n\
@@ -272,35 +273,35 @@ impl Metrics {
              edgeai_blocks_produced_total {}\n\n",
             self.blocks_produced.get()
         ));
-        
+
         output.push_str(&format!(
             "# HELP edgeai_transactions_processed_total Total transactions processed\n\
              # TYPE edgeai_transactions_processed_total counter\n\
              edgeai_transactions_processed_total {}\n\n",
             self.transactions_processed.get()
         ));
-        
+
         output.push_str(&format!(
             "# HELP edgeai_chain_height Current blockchain height\n\
              # TYPE edgeai_chain_height gauge\n\
              edgeai_chain_height {}\n\n",
             self.chain_height.get()
         ));
-        
+
         output.push_str(&format!(
             "# HELP edgeai_pending_transactions Number of pending transactions\n\
              # TYPE edgeai_pending_transactions gauge\n\
              edgeai_pending_transactions {}\n\n",
             self.pending_transactions.get()
         ));
-        
+
         output.push_str(&format!(
             "# HELP edgeai_active_accounts Number of active accounts\n\
              # TYPE edgeai_active_accounts gauge\n\
              edgeai_active_accounts {}\n\n",
             self.active_accounts.get()
         ));
-        
+
         // P2P metrics
         output.push_str(&format!(
             "# HELP edgeai_p2p_peers_connected Number of connected P2P peers\n\
@@ -308,7 +309,7 @@ impl Metrics {
              edgeai_p2p_peers_connected {}\n\n",
             self.p2p_peers_connected.get()
         ));
-        
+
         // Cache metrics
         output.push_str(&format!(
             "# HELP edgeai_cache_hits_total Total cache hits\n\
@@ -316,14 +317,14 @@ impl Metrics {
              edgeai_cache_hits_total {}\n\n",
             self.cache_hits.get()
         ));
-        
+
         output.push_str(&format!(
             "# HELP edgeai_cache_misses_total Total cache misses\n\
              # TYPE edgeai_cache_misses_total counter\n\
              edgeai_cache_misses_total {}\n\n",
             self.cache_misses.get()
         ));
-        
+
         // Uptime
         output.push_str(&format!(
             "# HELP edgeai_uptime_seconds Node uptime in seconds\n\
@@ -331,7 +332,7 @@ impl Metrics {
              edgeai_uptime_seconds {}\n\n",
             self.uptime_secs()
         ));
-        
+
         // Request duration histogram
         let duration_stats = self.http_request_duration.get_stats();
         output.push_str("# HELP edgeai_http_request_duration_seconds HTTP request latency\n");
@@ -354,7 +355,7 @@ impl Metrics {
             "edgeai_http_request_duration_seconds_count {}\n\n",
             duration_stats.count
         ));
-        
+
         output
     }
 
