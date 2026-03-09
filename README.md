@@ -1,57 +1,123 @@
 # EdgeAI Alpha
 
-**The Most Intelligent Data Chain for Edge AI**
+**EdgeAI Alpha** is an alpha-stage blockchain stack for edge AI and IoT networks that need verifiable data contribution, incentive alignment, and application-facing infrastructure.
 
-EdgeAI Alpha is a complete blockchain ecosystem designed specifically for edge AI applications. This repository uses a Monorepo structure, containing two core components: the blockchain node (backend) and the blockchain explorer (frontend).
+This monorepo combines a Rust node, a React explorer, a TypeScript SDK, and documentation into one repository for teams evaluating the project as infrastructure, an integration surface, or a collaboration candidate.
 
-## Project Structure
+## Repository status
 
+| Item | Status |
+|------|--------|
+| Visibility | Public |
+| Stage | Alpha |
+| Live explorer | [edgeai-alpha.vercel.app](https://edgeai-alpha.vercel.app) |
+| Live API demo | [edgeai-blockchain-node.fly.dev/api/chain](https://edgeai-blockchain-node.fly.dev/api/chain) |
+| Repository role | Monorepo for node, explorer, SDK, and docs |
+| Primary stack | Rust, Actix Web, React 19, TypeScript |
+
+## Why this matters
+
+Edge AI systems depend on distributed devices generating data outside centralized environments. That creates a recurring coordination problem:
+
+- how to verify which data is valuable,
+- how to reward contributors fairly,
+- how to expose network state to developers and operators,
+- how to turn raw device participation into an application-ready platform.
+
+EdgeAI Alpha is built around that coordination layer.
+
+## What is in this repository
+
+### 1. Blockchain node
+
+A Rust-based node with consensus, storage, networking, REST APIs, and smart contract support for edge-oriented workloads.
+
+### 2. Explorer frontend
+
+A React-based explorer for monitoring chain activity, validator participation, transaction flows, and operator-facing dashboards.
+
+### 3. TypeScript SDK
+
+A typed client for integrating applications, dashboards, and services with EdgeAI network endpoints.
+
+### 4. Documentation workspace
+
+A Docusaurus docs package for onboarding developers, node operators, and ecosystem participants.
+
+## Current status
+
+- **Stage:** Alpha
+- **Repository model:** Active monorepo with node, explorer, SDK, and docs
+- **Live surfaces:** Public explorer and API demo endpoints are available
+- **Intended audience:** Developers, infrastructure partners, data networks, and edge/IoT platform teams
+
+## Visual assets
+
+Repository-ready screenshots should be added under [docs/media](./docs/media/README.md). The recommended set is:
+
+- explorer dashboard overview,
+- validator or network visualization,
+- transaction or marketplace flow,
+- SDK or developer integration view.
+
+## Why it is relevant for partners
+
+EdgeAI Alpha is positioned as infrastructure for teams that need trustworthy data coordination at the edge. The project is most relevant to:
+
+- **Edge AI and IoT platforms** that need device registration, contribution tracking, and reward logic
+- **Data marketplace partners** exploring pricing, listing, and purchasing flows for machine-generated data
+- **Developers and integrators** that need APIs, dashboards, and SDK access rather than raw node software alone
+- **Ecosystem collaborators** interested in staking, governance, or network operations tooling
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A["Edge Devices + Data Providers"] --> B["PoIE Validation Layer"]
+    B --> C["Rust Node + P2P Network"]
+    C --> D["Marketplace + Smart Contracts"]
+    C --> E["REST API"]
+    E --> F["Explorer Frontend"]
+    E --> G["TypeScript SDK"]
+    F --> H["Operators and Ecosystem Participants"]
+    G --> I["Apps, Dashboards, Integrations"]
+    D --> I
 ```
+
+## Core capabilities
+
+### Consensus and network coordination
+
+- **PoIE consensus:** Proof of Information Entropy to evaluate and reward higher-value data contribution
+- **P2P networking:** libp2p-based peer discovery, synchronization, and node communication
+- **Persistent state:** Automatic blockchain state storage and recovery
+
+### Data and application layer
+
+- **Data marketplace:** Listing, purchasing, quality scoring, and transaction history
+- **Smart contracts:** Marketplace, federated learning, and device registration contract flows
+- **REST API:** Application-facing HTTP endpoints for chain, accounts, transactions, and network state
+
+### User-facing surfaces
+
+- **Real-time explorer:** Chain metrics, blocks, transactions, and validator activity
+- **Network visualization:** Geographic and topology-style monitoring views
+- **SDK support:** Type-safe integration path for external developers
+
+## Project structure
+
+```text
 edgeai-alpha/
-├── backend/          # Blockchain Node (Rust + Actix Web)
-│   ├── src/          # Source code
-│   ├── Cargo.toml    # Rust dependencies
-│   └── README.md     # Backend documentation
-├── frontend/         # Blockchain Explorer (React + TypeScript + Vite)
-│   ├── client/       # Frontend application source
-│   ├── server/       # Production server
-│   └── README.md     # Frontend documentation
+├── backend/          # Rust blockchain node and API layer
+├── frontend/         # React + TypeScript explorer
 ├── sdk/              # TypeScript SDK
-│   └── typescript/   # @edgeai/sdk package
-├── docs/             # Documentation site (Docusaurus)
-└── README.md         # This file
+├── docs/             # Docusaurus documentation workspace
+└── README.md         # Repository overview
 ```
 
-## Core Features
+## Quick start
 
-### Backend - Blockchain Node
-
-- **PoIE Consensus**: Innovative Proof of Information Entropy consensus algorithm
-- **Data Marketplace**: Support for data listing, purchasing, and quality assessment
-- **Smart Contracts**: Data marketplace, federated learning, and device registration contracts
-- **RESTful API**: Complete HTTP API interface
-- **Persistent Storage**: Automatic blockchain state persistence
-- **P2P Networking**: libp2p-based peer-to-peer communication
-
-### Frontend - Blockchain Explorer
-
-- **Real-time Dashboard**: Live monitoring of block height, difficulty, TPS, and more
-- **3D Network Visualization**: Interactive 3D globe showing validator distribution
-- **Staking Interface**: Delegate tokens and manage staking positions
-- **Governance Portal**: Create proposals and participate in on-chain voting
-- **IoT Data Integration**: Dedicated IoT transaction visualization
-- **Wallet Guide**: Interactive wallet creation and transaction tutorials
-- **Responsive Design**: Optimized for both desktop and mobile devices
-
-### SDK - TypeScript Client
-
-- **Full API Coverage**: Complete client for all blockchain endpoints
-- **Type Safety**: Full TypeScript support with comprehensive type definitions
-- **Easy Integration**: Simple installation via npm/pnpm
-
-## Quick Start
-
-### Run a Node with Docker
+### Run a node with Docker
 
 ```bash
 docker run -d \
@@ -63,7 +129,7 @@ docker run -d \
   ghcr.io/edgeai-chain/edgeai-alpha/edgeai-node:latest
 ```
 
-### Build from Source
+### Build from source
 
 #### Backend
 
@@ -74,8 +140,9 @@ cargo build --release
 ```
 
 After starting the node:
-- API Endpoint: http://localhost:8080/api/
-- Built-in Explorer: http://localhost:8080/
+
+- API endpoint: http://localhost:8080/api/
+- Built-in explorer: http://localhost:8080/
 
 #### Frontend
 
@@ -87,7 +154,7 @@ pnpm dev
 
 Development server: http://localhost:3000
 
-### SDK Installation
+### SDK installation
 
 ```bash
 npm install @edgeai/sdk
@@ -106,7 +173,7 @@ const chainInfo = await client.getChainInfo();
 console.log(`Block Height: ${chainInfo.height}`);
 ```
 
-## Tech Stack
+## Tech stack
 
 | Component | Technology |
 |-----------|------------|
@@ -118,10 +185,10 @@ console.log(`Block Height: ${chainInfo.height}`);
 | **Data Visualization** | Recharts, Cobe (3D Globe) |
 | **Documentation** | Docusaurus |
 
-## Live Demo
+## Live demo
 
-- **Explorer**: [https://edgeai-alpha.vercel.app](https://edgeai-alpha.vercel.app)
-- **API**: [https://edgeai-blockchain-node.fly.dev/api/chain](https://edgeai-blockchain-node.fly.dev/api/chain)
+- **Explorer:** [https://edgeai-alpha.vercel.app](https://edgeai-alpha.vercel.app)
+- **API:** [https://edgeai-blockchain-node.fly.dev/api/chain](https://edgeai-blockchain-node.fly.dev/api/chain)
 
 ## License
 
@@ -129,4 +196,4 @@ MIT License
 
 ## Contributing
 
-Issues and Pull Requests are welcome!
+Issues and pull requests are welcome.
