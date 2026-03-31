@@ -45,7 +45,7 @@ rocksdb = "0.22"
 sqlx = { version = "0.7", features = ["runtime-tokio", "mysql", "chrono"] }
 
 # Math for entropy calculation
-statrs = "0.17"
+statrs = "0.18"
 
 # Parallel processing
 rayon = "1.10"
